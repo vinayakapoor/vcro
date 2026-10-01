@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, Check, CheckCircle2, Circle, KeyRound, Loader2, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Circle, Copy, KeyRound, Loader2, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,10 @@ const FIELDS: Record<NonNullable<Source["auth"]>, { key: string; label: string; 
   "API key": [{ key: "account", label: "API endpoint", placeholder: "https://api.yourcompany.com" }, { key: "secret", label: "API key", placeholder: "Paste the key", secret: true }],
   "SCIM and API key": [{ key: "account", label: "SCIM base URL", placeholder: "https://hr.yourcompany.com/scim/v2" }, { key: "secret", label: "Bearer token", placeholder: "Paste the token", secret: true }],
   Webhook: [{ key: "account", label: "Destination URL", placeholder: "https://siem.yourcompany.com/ingest" }, { key: "secret", label: "Signing secret", placeholder: "Paste the secret", secret: true }],
+  "Log stream": [],
+  "Issued key": [],
 };
+const token = (prefix: string) => prefix + Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 32);
 const FREQ = ["Every 15 minutes", "Hourly", "Daily"];
 /** Stable per-connector fraction, so match rates and run sizes do not change between visits. */
 const frac = (id: string, salt = 0) => { let h = 2166136261 ^ salt; for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return ((h >>> 0) % 1000) / 1000; };
@@ -43,6 +46,7 @@ function ConnectorPage() {
   const { id } = Route.useParams();
   const src = SOURCES.find((x) => x.id === id)!;
   const sig = useSignals();
+  const connectors = useConnectors();
   const on = sig.connected.has(id);
   return (
     <div className="mx-auto max-w-[1100px] space-y-6">
@@ -53,6 +57,7 @@ function ConnectorPage() {
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{src.category} · {src.direction === "Action out" ? "Action out" : "Signal in"}</div>
             <h1 className="mt-0.5 text-2xl font-semibold leading-tight tracking-tight sm:text-[28px]">{src.name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{src.about}</p>
+            {on && connectors[id] && <p className="mt-1 text-sm font-medium">Connected to {connectors[id]!.vendor}</p>}
           </div>
           <StatusBadge on={on} offText="Not connected" />
         </div>
@@ -63,9 +68,22 @@ function ConnectorPage() {
 }
 
 // ---------- Setup ----------
-const CHECKS = (src: Source, matched: number, total: number) => src.direction === "Action out"
-  ? ["Reach the destination", "Authenticate", "Send a test event", "Receive acknowledgement"]
-  : ["Reach the endpoint", "Authenticate", "Read a sample of records", `Match people to the directory: ${fmt(matched)} of ${fmt(total)}`];
+const CHECKS = (src: Source, vendor: string, matched: number, total: number) => src.auth === "Issued key"
+  ? ["Key is active", "Scopes: read scores", `First request from ${vendor === "REST API" ? "your client" : vendor}`, "Rate limit applied"]
+  : src.direction === "Action out"
+    ? [`Reach ${vendor}`, "Authenticate", src.id === "out-itsm" ? "Create and read back a test ticket" : "Send a test event", "Receive acknowledgement"]
+    : src.auth === "Log stream"
+      ? [`Stream from ${vendor} is arriving`, "Events parse correctly", "Read a sample of records", `Match people to the directory: ${fmt(matched)} of ${fmt(total)}`]
+      : [`Reach ${vendor}`, "Authenticate", "Read a sample of records", `Match people to the directory: ${fmt(matched)} of ${fmt(total)}`];
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+      <div className="min-w-0 flex-1"><div className="text-[11px] text-muted-foreground">{label}</div><div className="truncate font-mono text-xs">{value}</div></div>
+      <Button variant="ghost" size="sm" className="h-7" onClick={() => { void navigator.clipboard?.writeText(value); toast("Copied"); }}><Copy className="size-3.5" />Copy</Button>
+    </div>
+  );
+}
 
 function Step({ n, title, done, children }: { n: number; title: string; done: boolean; children: React.ReactNode }) {
   return (
@@ -81,7 +99,11 @@ function Setup({ src }: { src: Source }) {
   const sig = useSignals();
   const els = ELEMENTS.filter((e) => e.sourceId === src.id);
   const fields = FIELDS[src.auth ?? "API key"];
+  const vendors = src.vendors ?? [];
+  const [vendor, setVendor] = useState(vendors.length === 1 ? vendors[0]! : "");
   const [vals, setVals] = useState<Record<string, string>>({});
+  const [issued, setIssued] = useState<{ key: string; url: string } | null>(null);
+  const [added, setAdded] = useState(false);
   const [authorised, setAuthorised] = useState(false);
   const [authorising, setAuthorising] = useState(false);
   const [skip, setSkip] = useState<string[]>([]);
@@ -95,11 +117,13 @@ function Setup({ src }: { src: Source }) {
   const total = ready ? orgSummary(sig).total : 0;
   const matched = Math.round(total * (0.972 + frac(src.id) * 0.025));
   const filled = fields.every((f) => (vals[f.key] ?? "").trim().length > 2);
-  const authDone = src.auth === "OAuth" ? authorised : filled;
+  const stream = src.auth === "Log stream", keyed = src.auth === "Issued key";
+  const authDone = !!vendor && (src.auth === "OAuth" ? authorised : stream ? !!issued && added : keyed ? !!issued : filled);
+  const issue = () => setIssued({ key: token(keyed ? "vcro_live_" : "ing_"), url: `${window.location.origin}/${keyed ? "api/v1/scores" : `ingest/v1/${src.id.replace("int-", "")}`}` });
   const scopeDone = src.direction === "Action out" ? Object.values(controls).some(Boolean) : skip.length < els.length;
   const before = ready ? orgScoreFor(sig) : null;
   const after = ready && step === 4 ? orgScoreFor(previewSource(src.id, true)) : null;
-  const checks = CHECKS(src, matched, total);
+  const checks = CHECKS(src, vendor || "the service", matched, total);
 
   const authorise = () => { setAuthorising(true); timer.current = setTimeout(() => { setAuthorising(false); setAuthorised(true); }, 1100); };
   const runTest = () => {
@@ -108,13 +132,36 @@ function Setup({ src }: { src: Source }) {
     tick(0);
   };
   const connect = () => {
-    connectSource(src.id, { account: vals["account"]!.trim(), frequency: freq, scope, controls }, skip);
-    toast.success(`${src.name} connected`, { description: src.direction === "Action out" ? "The score is now being sent." : `First sync complete. ${fmt(matched)} people matched.` });
+    connectSource(src.id, { vendor, account: keyed ? `Key ending ${issued!.key.slice(-4)}` : stream ? "Log stream" : vals["account"]!.trim(), frequency: stream ? "Continuous" : freq, scope, controls }, skip);
+    toast.success(`${vendor} connected`, { description: src.direction === "Action out" ? "The score is now being sent." : `First sync complete. ${fmt(matched)} people matched.` });
   };
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <ol className="rounded-xl border bg-card p-5 [&>li:last-child>div]:pb-0">
-        <Step n={1} title={src.auth === "OAuth" ? "Authorise access" : "Enter connection details"} done={authDone}>
+        <Step n={1} title="Choose your product" done={!!vendor}>
+          <div className="flex flex-wrap gap-2">
+            {vendors.map((v) => (
+              <button key={v} type="button" aria-pressed={vendor === v} disabled={authorised}
+                onClick={() => { setVendor(v); setStep(-1); }}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${vendor === v ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-muted"}`}>{v}</button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Using something else? Your HumanFirewall contact can add a connector, or you can send events to the generic ingest API.</p>
+        </Step>
+
+        <Step n={2} title={src.auth === "OAuth" ? `Authorise access${vendor ? ` in ${vendor}` : ""}` : stream ? `Point ${vendor || "your gateway"} at vCRO` : keyed ? "Create an API key" : "Enter connection details"} done={authDone}>
+          {(stream || keyed) && (
+            <div className="space-y-2">
+              {!issued ? <Button onClick={issue} disabled={!vendor}><KeyRound className="size-4" />{keyed ? "Generate API key" : "Generate ingest endpoint"}</Button> : (
+                <>
+                  <CopyRow label={keyed ? "Base URL" : "Ingest URL"} value={issued.url} />
+                  <CopyRow label={keyed ? "API key, shown once" : "Token"} value={issued.key} />
+                  {stream && <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm"><Checkbox checked={added} onCheckedChange={(v) => { setAdded(!!v); setStep(-1); }} />I have added this as a log destination in {vendor}</label>}
+                </>
+              )}
+              {keyed && vendor && vendor !== "REST API" && issued && <p className="text-xs text-muted-foreground">Paste the key into the {vendor} connector for HumanFirewall. The nightly export starts once the first request arrives.</p>}
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             {fields.map((f) => (
               <div key={f.key} className="space-y-1.5">
@@ -132,10 +179,16 @@ function Setup({ src }: { src: Source }) {
               {authorised && <Button variant="ghost" size="sm" onClick={() => { setAuthorised(false); setStep(-1); }}>Change</Button>}
             </div>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">{src.direction === "Action out" ? "vCRO only sends data to this destination. It never reads from it." : "Read-only. vCRO never changes anything in the connected system."} Secrets are stored encrypted and never shown again.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{
+            src.id === "out-access" || src.id === "out-mailpolicy" ? "vCRO only changes who is in the groups you name. It cannot create or edit policies, and break-glass accounts are never added."
+            : src.id === "out-itsm" ? "vCRO creates tickets and reads their status back. It cannot see other tickets."
+            : keyed ? "The key can only read scores. Revoke it at any time from this page."
+            : src.direction === "Action out" ? "vCRO only sends data to this destination. It never reads from it."
+            : stream ? "Send only the log types listed in step 3. vCRO keeps per-person totals, not raw browsing history."
+            : "Read-only. vCRO never changes anything in the connected system."} Secrets are stored encrypted and never shown again.</p>
         </Step>
 
-        <Step n={2} title={src.direction === "Action out" ? "Choose what the score does there" : "Choose what to bring in"} done={authDone && scopeDone}>
+        <Step n={3} title={src.direction === "Action out" ? "Choose what the score does there" : "Choose what to bring in"} done={authDone && scopeDone}>
           {src.direction === "Action out" ? (
             <div className="divide-y rounded-lg border">
               {src.controls!.map((c) => (
@@ -159,14 +212,14 @@ function Setup({ src }: { src: Source }) {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>People in scope</Label>
                   <Select value={scope} onValueChange={setScope}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All people">All people</SelectItem>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d} only</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-1.5"><Label>Sync</Label>
+                <div className={`space-y-1.5 ${stream ? "hidden" : ""}`}><Label>Sync</Label>
                   <Select value={freq} onValueChange={setFreq}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{FREQ.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
               </div>
             </>
           )}
         </Step>
 
-        <Step n={3} title="Test and connect" done={step === 4}>
+        <Step n={4} title="Test and connect" done={step === 4}>
           {step === -1 ? (
             <Button variant="outline" onClick={runTest} disabled={!authDone || !scopeDone}>Run connection test</Button>
           ) : (
@@ -181,11 +234,11 @@ function Setup({ src }: { src: Source }) {
           )}
           {step === 4 && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button onClick={connect}>Connect {src.name}</Button>
+              <Button onClick={connect}>Connect {vendor}</Button>
               <span className="text-xs text-muted-foreground">All checks passed.</span>
             </div>
           )}
-          {!authDone && step === -1 && <p className="mt-2 text-xs text-muted-foreground">Complete step 1 to run the test.</p>}
+          {!authDone && step === -1 && <p className="mt-2 text-xs text-muted-foreground">Complete steps 1 and 2 to run the test.</p>}
         </Step>
       </ol>
 
@@ -209,9 +262,10 @@ function Setup({ src }: { src: Source }) {
         <div className="rounded-xl border bg-card p-4 text-sm">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Before you start</div>
           <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>{src.auth === "OAuth" ? "An admin of the other system must approve the consent screen." : "Create a dedicated service credential with the least access needed."}</li>
-            <li>People are matched to your directory by work email.</li>
-            <li>You can disconnect at any time. The score recalculates straight away.</li>
+            {(keyed ? ["The key is shown once. Store it in your secrets manager.", "Scores are served by organisation, department, team and person.", "Revoke the key at any time. Access stops immediately."]
+              : stream ? [`You need admin access to ${vendor || "the gateway"} to add a log destination.`, "People are matched to your directory by work email.", "You can disconnect at any time. The score recalculates straight away."]
+              : [src.auth === "OAuth" ? `An admin of ${vendor || "the other system"} must approve the consent screen.` : "Create a dedicated service credential with the least access needed.", src.direction === "Action out" ? "Changes follow the score on every sync, in both directions." : "People are matched to your directory by work email.", "You can disconnect at any time. The score recalculates straight away."]
+            ).map((t) => <li key={t}>{t}</li>)}
           </ul>
         </div>
       </aside>
@@ -302,13 +356,13 @@ function Connected({ src }: { src: Source }) {
 
         <Widget title="Connection" ready={ready} className="lg:col-span-12">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div><div className="text-xs text-muted-foreground">{FIELDS[src.auth ?? "API key"][0]!.label}</div><div className="truncate text-sm font-medium">{cfg?.account ?? "Set up by HumanFirewall"}</div></div>
+            <div><div className="text-xs text-muted-foreground">Product</div><div className="truncate text-sm font-medium">{cfg?.vendor}</div><div className="truncate text-xs text-muted-foreground">{cfg?.account}</div></div>
             <div><div className="text-xs text-muted-foreground">Authentication</div><div className="text-sm font-medium">{src.auth}</div></div>
             <div><div className="text-xs text-muted-foreground">Connected</div><div className="text-sm font-medium">{cfg ? formatStamp(cfg.connectedAt) : "At onboarding"}</div></div>
             {!out && (
               <div><div className="text-xs text-muted-foreground">Sync</div>
-                <Select value={cfg?.frequency ?? FREQ[1]!} onValueChange={(v) => cfg ? patchConnector(src.id, { frequency: v }) : connectSource(src.id, { account: "Set up by HumanFirewall", frequency: v, scope: "All people", controls: {} }, els.filter((e) => !sig.active.has(e.id)).map((e) => e.id))}>
-                  <SelectTrigger className="mt-0.5 h-8 w-44"><SelectValue /></SelectTrigger><SelectContent>{FREQ.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
+                <Select value={cfg?.frequency ?? FREQ[1]!} onValueChange={(v) => patchConnector(src.id, { frequency: v })} disabled={src.auth === "Log stream"}>
+                  <SelectTrigger className="mt-0.5 h-8 w-44"><SelectValue /></SelectTrigger><SelectContent>{[...FREQ, ...(src.auth === "Log stream" ? ["Continuous"] : [])].map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
             )}
           </div>
           <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">

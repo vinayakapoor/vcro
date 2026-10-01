@@ -71,46 +71,47 @@ export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "E
   );
 }
 
+/** Hero, left: the score itself. */
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
-  const top = s.drivers.slice(0, 4);
+  return (
+    <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
+      <div className="flex flex-1 items-center justify-center"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
+      <div className="mt-3 border-t pt-3"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
+    </Widget>
+  );
+}
+
+export function BandsCard({ s, ready }: { s: Summary; ready: boolean }) {
   const max = Math.max(1, ...s.bands.map((b) => b.count));
   return (
-    <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-5" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <div className="flex flex-1 items-center justify-center py-2"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
-
-      <div className="mt-3 border-t pt-4">
-        <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>People by band</span><span className="tabular-nums">{fmt(s.scored)} scored</span></div>
-        <div className="space-y-1">
-          {s.bands.map((b) => (
-            <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`See the ${fmt(b.count)} people in ${b.band}`}
-              className="-mx-1.5 grid grid-cols-[78px_1fr_auto] items-center gap-3 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: BAND_VAR[b.band] }} />{b.band}</span>
-              <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, minWidth: b.count ? 3 : 0, background: BAND_VAR[b.band] }} /></span>
-              <span className="w-24 text-right tabular-nums">{fmt(b.count)}<span className="ml-1.5 text-xs text-muted-foreground">{pct(s.scored ? b.count / s.scored : 0)}</span></span>
-            </Link>
-          ))}
-        </div>
+    <Widget title="People by band" ready={ready} action={<span className="text-xs tabular-nums text-muted-foreground">{fmt(s.scored)} scored</span>}>
+      <div className="space-y-0.5">
+        {s.bands.map((b) => (
+          <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`See the ${fmt(b.count)} people in ${b.band}`}
+            className="-mx-1.5 grid grid-cols-[78px_1fr_auto] items-center gap-3 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: BAND_VAR[b.band] }} />{b.band}</span>
+            <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, minWidth: b.count ? 3 : 0, background: BAND_VAR[b.band] }} /></span>
+            <span className="w-24 text-right tabular-nums">{fmt(b.count)}<span className="ml-1.5 text-xs text-muted-foreground">{pct(s.scored ? b.count / s.scored : 0)}</span></span>
+          </Link>
+        ))}
       </div>
+    </Widget>
+  );
+}
 
-      <div className="mt-4 border-t pt-4">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">What drives it</div>
-        <PillarMeters pillars={s.pillars} ai={s.aiAgents} />
-      </div>
-      <div className="mt-4 border-t pt-3"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
-      <div className="mt-3 rounded-xl border bg-muted/30 p-3">
-        <div className="flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>What moved the score since {PREV_MONTH}</span><span className="tabular-nums">{s.prev} to {s.score}</span>
-        </div>
-        {top.length ? (
-          <ul className="mt-2 space-y-1.5">
-            {top.map((d) => (
-              <li key={d.category} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate">{d.category}</span>
-                <span className={`shrink-0 text-xs font-medium tabular-nums ${d.delta < 0 ? "text-success" : "text-warning"}`}>{d.delta > 0 ? "+" : ""}{d.delta.toFixed(1)} pts</span>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="mt-2 text-sm text-muted-foreground">No driver moved by 0.1 points or more.</p>}
+export function DriversCard({ s, ready }: { s: Summary; ready: boolean }) {
+  const top = s.drivers.slice(0, 2);
+  return (
+    <Widget title="What drives the score" ready={ready}>
+      <PillarMeters pillars={s.pillars} ai={s.aiAgents} />
+      <div className="mt-3 border-t pt-2.5">
+        <div className="flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>Moved since {PREV_MONTH}</span><span className="tabular-nums">{s.prev} to {s.score}</span></div>
+        {top.length ? top.map((d) => (
+          <div key={d.category} className="mt-1 flex items-center justify-between gap-3 text-sm">
+            <span className="truncate">{d.category}</span>
+            <span className={`shrink-0 text-xs font-medium tabular-nums ${d.delta < 0 ? "text-success" : "text-warning"}`}>{d.delta > 0 ? "+" : ""}{d.delta.toFixed(1)} pts</span>
+          </div>
+        )) : <p className="mt-1 text-sm text-muted-foreground">No driver moved by 0.1 points or more.</p>}
       </div>
     </Widget>
   );
@@ -462,9 +463,9 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
   const live = cov.sources.filter((x) => x.on);
   const next = ready ? bestNextSources(sig) : [];
   return (
-    <Widget title="Signals feeding the score" ready={ready} className="flex flex-1 flex-col" contentClassName="flex flex-1 flex-col"
+    <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
       action={<Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>}>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {cov.pillars.map((p) => (
           <div key={p.pillar} className="rounded-xl border bg-muted/40 p-3" title={p.from.length ? `From ${p.from.join(", ")}` : undefined}>
             <div className="flex items-baseline justify-between gap-2">
@@ -485,16 +486,16 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Percentages show how much of each part of the model has live data. Attitude is part of Behaviour, shown on its own because it comes from check-in questions, not events.</p>
 
-      <div className="mt-auto pt-4">
+      <div className="mt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-xs">
           <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{live.length} of {cov.sources.length} sources connected</span> · {fmt(cov.events30d)} events in 30 days</span>
           {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium underline underline-offset-2">See all {next.length} you can add</Link>}
         </div>
         {next.length > 0 ? (
-          <ul className="mt-2 divide-y rounded-xl border">
+          <ul className="mt-2 grid gap-2 md:grid-cols-3">
             {next.slice(0, 3).map((n) => (
-              <li key={n.id}>
-                <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <li key={n.id} className="rounded-xl border">
+                <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 rounded-xl px-3 py-2 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">Adds {n.signals} {n.signals === 1 ? "signal" : "signals"}</span></span>
                   <span className="shrink-0 rounded-md bg-success/10 px-1.5 py-0.5 text-xs font-medium tabular-nums text-success">+{n.gain}% confidence</span>
                   <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>

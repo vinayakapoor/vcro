@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
-import { Eye, LayoutGrid, List, Plus, Tags, Trash2, UserRoundX, Users } from "lucide-react";
+import { Eye, LayoutGrid, List, Plus, Tags, Trash2, UserRoundX, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,8 +17,8 @@ import { usePrefs, useReady } from "@/features/shared/prefs";
 import { BAND_VAR, BandBadge, DeltaBadge, tagIcon } from "@/features/shared/band";
 import { PeopleTable } from "@/features/people/people-table";
 import {
-  TAGS, addWatchlist, clearPinned, countRule, createTag, deleteTag, describeRule, fmt, initials, removeWatchlist, useCustomTags, usePinned, useSavedWatchlists, useSignals,
-  watchlistSummary, type GroupKind, type WatchlistRule,
+  DIRECTORY_GROUPS, TAGS, addWatchlist, clearPinned, countRule, createTag, customTagsByPerson, deleteTag, describeRule, fmt, getPeople, groupMembers, initials, mapGroupToTag,
+  removeWatchlist, setTagGroups, unmapGroup, useCustomTags, usePinned, useSavedWatchlists, useSignals, watchlistSummary, type GroupKind, type WatchlistRule,
 } from "@/lib/api";
 import { DEPARTMENTS, LOCATIONS } from "@/data/catalogue";
 import { cn } from "@/lib/utils";
@@ -153,28 +153,58 @@ function WatchlistsPage() {
   );
 }
 
+function GroupPicker({ taken, onPick }: { taken: string[]; onPick: (g: string) => void }) {
+  const left = DIRECTORY_GROUPS.filter((g) => !taken.includes(g.id));
+  if (!left.length) return null;
+  return (
+    <Select value="" onValueChange={onPick}>
+      <SelectTrigger className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground" aria-label="Add a directory group"><Plus className="size-3" /><SelectValue placeholder="Directory group" /></SelectTrigger>
+      <SelectContent>{left.map((g) => <SelectItem key={g.id} value={g.id}><span className="font-mono text-xs">{g.id}</span><span className="ml-2 text-xs text-muted-foreground">{g.about} · {fmt(groupMembers(g.id).size)}</span></SelectItem>)}</SelectContent>
+    </Select>
+  );
+}
+const GroupChip = ({ id, onRemove }: { id: string; onRemove: () => void }) => (
+  <span className="inline-flex items-center gap-1 rounded-md border bg-muted py-0.5 pl-1.5 pr-0.5 font-mono text-[11px]">{id}
+    <button type="button" aria-label={`Stop using ${id}`} className="grid size-4 place-items-center rounded hover:bg-foreground/10" onClick={onRemove}><X className="size-3" /></button></span>
+);
+
 function ManageTags() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const tags = useCustomTags();
+  const sig = useSignals();
+  const directory = sig.connected.has("int-identity");
+  const counts = open ? Object.fromEntries(TAGS.map((t) => [t.name, getPeople(sig).filter((p) => p.tags.includes(t.name)).length])) : {};
+  const byPerson = open ? customTagsByPerson(tags, sig) : new Map<string, string[]>();
+  const countOwn = (n: string) => { let c = 0; for (const l of byPerson.values()) if (l.includes(n)) c++; return c; };
+  const edits = Object.keys(sig.edits.add).length + Object.keys(sig.edits.remove).length;
   const taken = [...TAGS.map((t) => t.name), ...tags.map((t) => t.name)].some((n) => n.toLowerCase() === name.trim().toLowerCase());
-  const add = () => { const t = createTag(name.trim(), about.trim()); toast.success(`Tag "${t.name}" created`, { description: "Add people from the People table or a person's page." }); setName(""); setAbout(""); };
+  const add = () => { const t = createTag(name.trim(), about.trim()); toast.success(`Tag "${t.name}" created`, { description: "Fill it from a directory group below, or add people from the People table." }); setName(""); setAbout(""); };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button variant="outline"><Tags className="size-4" />Manage tags</Button></DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader><DialogTitle>Tags</DialogTitle><DialogDescription>Tags say who a person is. Built-in tags are applied automatically from your data. Your own tags are applied by hand.</DialogDescription></DialogHeader>
-        <div className="max-h-[50vh] space-y-4 overflow-y-auto pr-1">
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader><DialogTitle>Tags</DialogTitle><DialogDescription>A tag says who a person is. Tags fill three ways: automatically from a connected source, from a directory group you map, or by hand on a person's page or the People table.</DialogDescription></DialogHeader>
+        <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+          {!directory && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Directory groups come from the identity provider. <Link to="/vcro/signals/$id" params={{ id: "int-identity" }} className="font-medium text-foreground underline underline-offset-2">Connect it</Link> to map groups to tags.</p>}
           <div>
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Your tags</div>
-            {!tags.length && <p className="text-sm text-muted-foreground">None yet.</p>}
+            {!tags.length && <p className="text-sm text-muted-foreground">None yet. Create one for any group your organisation cares about.</p>}
             <ul className="divide-y">
               {tags.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(t.name)}</span>
-                  <span className="min-w-0 flex-1"><span className="block font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.about || "No description"} · {fmt(t.members.length)} people</span></span>
-                  <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete tag ${t.name}`} onClick={() => deleteTag(t.id)}><Trash2 className="size-4" /></Button>
+                <li key={t.id} className="py-2.5 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(t.name)}</span>
+                    <span className="min-w-0 flex-1"><span className="block font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.about || "No description"}</span></span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(countOwn(t.name))} people</span>
+                    <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete tag ${t.name}`} onClick={() => deleteTag(t.id)}><Trash2 className="size-4" /></Button>
+                  </div>
+                  {directory && <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-9">
+                    {(t.groups ?? []).map((g) => <GroupChip key={g} id={g} onRemove={() => setTagGroups(t.id, (t.groups ?? []).filter((x) => x !== g))} />)}
+                    <GroupPicker taken={t.groups ?? []} onPick={(g) => setTagGroups(t.id, [...(t.groups ?? []), g])} />
+                    {t.members.length > 0 && <span className="text-xs text-muted-foreground">+ {fmt(t.members.length)} added by hand</span>}
+                  </div>}
                 </li>
               ))}
             </ul>
@@ -186,15 +216,26 @@ function ManageTags() {
             {taken && <p className="mt-1 text-xs text-warning">A tag with this name already exists.</p>}
           </div>
           <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Built-in tags</div>
+            <div className="mb-1.5 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>Built-in tags</span>{edits > 0 && <span className="normal-case tracking-normal">{fmt(edits)} people edited by hand</span>}</div>
             <ul className="divide-y">
-              {TAGS.map((t) => (
-                <li key={t.name} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(t.name)}</span>
-                  <span className="min-w-0 flex-1"><span className="block font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.about}</span></span>
-                  <span className="shrink-0 text-xs text-muted-foreground">From {t.source}</span>
-                </li>
-              ))}
+              {TAGS.map((t) => {
+                const live = sig.connected.has(t.sourceId);
+                const maps = sig.edits.maps.filter((m) => m.tag === t.name).map((m) => m.group);
+                return (
+                  <li key={t.name} className="py-2.5 text-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(t.name)}</span>
+                      <span className="min-w-0 flex-1"><span className="block font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.about}</span></span>
+                      <span className="shrink-0 text-right text-xs text-muted-foreground"><span className="block tabular-nums text-foreground">{fmt(counts[t.name] ?? 0)} people</span>
+                        {live ? `From ${t.source}` : <Link to="/vcro/signals/$id" params={{ id: t.sourceId }} className="underline underline-offset-2">Connect {t.source}</Link>}</span>
+                    </div>
+                    {directory && <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-9">
+                      {maps.map((g) => <GroupChip key={g} id={g} onRemove={() => unmapGroup(g, t.name)} />)}
+                      <GroupPicker taken={maps} onPick={(g) => mapGroupToTag(g, t.name)} />
+                    </div>}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

@@ -30,7 +30,7 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
   const signals = useSignals();
   const pinned = usePinned();
   const customTags = useCustomTags();
-  const custom = customTagsByPerson(customTags);
+  const custom = customTagsByPerson(customTags, signals);
   const tagsOf = (p: ScoredPerson) => [...p.tags, ...(custom.get(p.id) ?? [])];
   const { privacy } = usePrefs();
   const nm = (p: ScoredPerson) => (privacy ? pseudonym(p.id) : p.name);
@@ -56,7 +56,7 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
     ) : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestSignal?.value ?? -1 },
     { id: "channel", header: "Weakest channel", cell: (p) => (p.weakestChannel ? <ChannelBadge channel={p.weakestChannel} /> : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestChannel ?? "" },
     { id: "lure", header: "Top lure", cell: (p) => (p.topLure ? <SoftBadge>{p.topLure}</SoftBadge> : <span className="text-muted-foreground">None</span>), sort: (p) => p.topLure ?? "" },
-    { id: "tags", header: "Tags", cell: (p) => <TagList tags={p.tags} custom={custom.get(p.id) ?? []} />, sort: (p) => tagsOf(p).length },
+    { id: "tags", header: "Tags", cell: (p) => <TagList tags={p.tags} custom={custom.get(p.id) ?? []} notes={p.tagNotes} />, sort: (p) => tagsOf(p).length },
     { id: "confidence", header: "Confidence", cell: (p) => <span className={`tabular-nums ${p.lowConfidence ? "text-warning" : ""}`}>{p.confidence}%</span>, sort: (p) => p.confidence },
     { id: "last", header: "Last simulation", cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatAge(p.lastSimDays)}</span>, sort: (p) => -(p.lastSimDays ?? 9999) },
   ];

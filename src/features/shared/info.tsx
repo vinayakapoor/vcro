@@ -16,6 +16,8 @@ export const GLOSSARY: Record<string, string> = {
   "Scored people": "People with at least one simulation result and one learning signal, the minimum for a score.",
   "Insufficient data": "People without a score yet because they have no simulation result or no learning signal.",
   "Signals feeding the score": "How much of each part of the scoring model has live data behind it, and which sources supply it. Nothing from a source that is not connected is used or shown anywhere in vCRO.",
+  "People by band": "How many scored people sit in each risk band today. Click a band to see its people.",
+  "What drives the score": "The average for each part of the model across everyone scored, and which drivers moved the organisation score since last month.",
   "Weakest signals": "The signals where the organisation scores worst right now. Fixing these moves the score the most.",
   "Risk trend": "Organisation score for each of the last 12 months, with the campaigns run in between. Set a target score in Settings to draw a goal line.",
   "Biggest movers": "Departments and people whose score rose or fell most since last month.",

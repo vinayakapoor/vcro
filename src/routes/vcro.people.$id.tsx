@@ -21,7 +21,8 @@ import {
 import { PERSON_BY_ID, personActivity, type ActivityType, type Finding } from "@/data/people";
 import { TagList } from "@/features/shared/tags";
 import { BAND_VAR } from "@/features/shared/band";
-import { SOURCES, accessFindings, exposureFindings, missingSources } from "@/lib/api";
+import { SOURCES, TAGS, accessFindings, customTagsByPerson, exposureFindings, missingSources, overrideTag } from "@/lib/api";
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 const SKILL_LEVELS = ["Starter", "Aware", "Capable", "Strong", "Champion"];
 const SKILL_CUTS = [0, 40, 55, 70, 85];
@@ -87,7 +88,8 @@ function PersonPage() {
   if (!p) return <PersonNotFound />;
   const name = privacy ? pseudonym(p.id) : p.name;
   const allActivity = personActivity(p);
-  const custom = customTags.filter((t) => t.members.includes(p.id));
+  const customNames = customTagsByPerson(customTags, signals).get(p.id) ?? [];
+  const edited = !!(signals.edits.add[p.id]?.length || signals.edits.remove[p.id]?.length);
   const isPinned = pinned.includes(p.id);
   const myRuns = runs.filter((r) => r.key.startsWith(`${p.id}:`) && r.status === "Queued");
   const queue = (workflow: string) => {
@@ -125,15 +127,23 @@ function PersonPage() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1">
               {p.level !== "Individual" && <SoftBadge>{p.level === "Head" ? "Department head" : "People manager"}</SoftBadge>}
-              <TagList tags={p.tags} custom={custom.map((t) => t.name)} max={4} wrap />
+              <TagList tags={p.tags} custom={customNames} max={4} wrap notes={p.tagNotes} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Plus className="size-3" />Tag</button></DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuLabel>{customTags.length ? "Your tags" : "No tags of your own yet"}</DropdownMenuLabel>
                   {customTags.map((t) => { const has = t.members.includes(p.id); return <DropdownMenuItem key={t.id} onSelect={() => (has ? untagPerson(t.id, p.id) : tagPeople(t.id, [p.id]))}>{has ? <X className="size-4" /> : <Plus className="size-4" />}{has ? `Remove ${t.name}` : t.name}</DropdownMenuItem>; })}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Built-in tags</DropdownMenuLabel>
+                  <div className="max-h-56 overflow-y-auto">
+                    {TAGS.map((t) => { const has = p.tags.includes(t.name); return <DropdownMenuItem key={t.name} onSelect={() => overrideTag(p.id, t.name, has ? "remove" : "add")}>{has ? <X className="size-4" /> : <Plus className="size-4" />}{has ? `Remove ${t.name}` : t.name}</DropdownMenuItem>; })}
+                  </div>
+                  {edited && <DropdownMenuItem onSelect={() => TAGS.forEach((t) => overrideTag(p.id, t.name, "auto"))}><RotateCcw className="size-4" />Back to automatic</DropdownMenuItem>}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild><Link to="/vcro/watchlists">Manage tags</Link></DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {edited && <span className="text-xs text-muted-foreground">Edited by hand</span>}
             </div>
           </div>
         </div>

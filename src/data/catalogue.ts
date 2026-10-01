@@ -15,7 +15,9 @@ export type Source = {
   /** One line on what connecting this gives you. */
   about?: string;
   /** How the connector authenticates. */
-  auth?: "OAuth" | "API key" | "SCIM and API key" | "Webhook";
+  auth?: "OAuth" | "API key" | "SCIM and API key" | "Webhook" | "Log stream" | "Issued key";
+  /** Products this connector supports. The admin picks theirs during setup. */
+  vendors?: string[];
   controls?: Control[];
   defaultConnected: boolean;
   lastSync: string;
@@ -37,30 +39,29 @@ export const SOURCES: Source[] = [
   { id: "feedback", name: "Feedback", kind: "Module", defaultConnected: true, lastSync: "30 Sep, 18:00", events30d: 890 },
   { id: "gamification", name: "Gamification", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 10:00", events30d: 3320 },
   { id: "recipients", name: "Recipients", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 5200 },
-  { id: "int-identity", name: "Identity provider", kind: "Integration", category: "Identity", direction: "Signal in", about: "Sign-in risk, admin roles and MFA strength across every account in the organisation.", auth: "OAuth", defaultConnected: true, lastSync: "1 Oct, 10:40", events30d: 9400 },
-  { id: "int-pam", name: "Privileged access management", kind: "Integration", category: "Identity", direction: "Signal in", about: "Where standing privilege sits in the organisation and how privileged sessions behave.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 620 },
-  { id: "int-password", name: "Password manager", kind: "Integration", category: "Identity", direction: "Signal in", about: "Weak and reused passwords across the organisation, and vault adoption by team.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 1480 },
-  { id: "int-endpoint", name: "Endpoint protection", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Malware and risky-action alerts from every managed device.", auth: "API key", defaultConnected: true, lastSync: "1 Oct, 10:42", events30d: 2150 },
-  { id: "int-mdm", name: "Device management", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Device compliance and patch levels across the whole fleet.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 5200 },
-  { id: "int-data", name: "Data loss prevention", kind: "Integration", category: "Data", direction: "Signal in", about: "Data-handling events, and where access to sensitive data is concentrated.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 1730 },
-  { id: "int-web", name: "Secure web gateway", kind: "Integration", category: "Web", direction: "Signal in", about: "Blocked sites and unsanctioned GenAI use across the organisation.", auth: "API key", defaultConnected: true, lastSync: "1 Oct, 10:44", events30d: 12800 },
-  { id: "int-browser", name: "Managed browser", kind: "Integration", category: "Browser", direction: "Signal in", about: "Risky extensions, data pasted into GenAI and password reuse, seen in managed browsers.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 7300 },
-  { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", direction: "Signal in", about: "Impersonation attempts aimed at the organisation and misdirected outbound email.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 16400 },
-  { id: "int-collab", name: "Collaboration and chat", kind: "Integration", category: "Collaboration", direction: "Signal in", about: "Phishing clicked and reported in chat, and risky external sharing across workspaces.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 3900 },
-  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, departments, joiners, movers and leavers.", auth: "SCIM and API key", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
-  { id: "int-third", name: "Contractor and third-party directory", kind: "Integration", category: "HR", direction: "Signal in", about: "Contractors and vendors with access, and access that outlives a contract.", auth: "SCIM and API key", defaultConnected: false, lastSync: "", events30d: 260 },
-  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "Breached credentials and what is public about the organisation and its people.", auth: "API key", defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
-  { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", direction: "Signal in", about: "The AI agents in use across the organisation, what they can reach and how they hold up to attack.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 880 },
-  { id: "out-access", name: "Conditional access", kind: "Integration", category: "Identity", direction: "Action out", about: "Tighten sign-in for the riskiest groups in the organisation.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 0,
-    controls: [{ id: "stepup", name: "Step-up sign-in", detail: "Require stronger sign-in for High and Critical people", people: "high" }, { id: "session", name: "Shorter sessions", detail: "Limit session length for very attacked VIPs", people: "vipAttacked" }] },
-  { id: "out-mailpolicy", name: "Email policy", kind: "Integration", category: "Email", direction: "Action out", about: "Stricter mail filtering for the groups that are attacked most.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
-    controls: [{ id: "filter", name: "Stricter filtering", detail: "Apply the strict filtering policy to very attacked VIPs", people: "vipAttacked" }, { id: "banner", name: "External sender banner", detail: "Show a warning banner to High and Critical people", people: "high" }] },
-  { id: "out-siem", name: "SIEM and SOAR", kind: "Integration", category: "Security operations", direction: "Action out", about: "Add human risk context to the alerts your SOC already works.", auth: "Webhook", defaultConnected: false, lastSync: "", events30d: 0,
-    controls: [{ id: "enrich", name: "Alert enrichment", detail: "Add score, band and tags to every alert that involves a user", people: "all" }, { id: "events", name: "Score change events", detail: "Send an event when someone enters High or Critical", people: "high" }] },
-  { id: "out-itsm", name: "Ticketing", kind: "Integration", category: "Security operations", direction: "Action out", about: "A ticket for every approved action, closed with evidence.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
-    controls: [{ id: "ticket", name: "Ticket per action", detail: "Open a ticket when a recommended action is approved", people: "actions" }, { id: "evidence", name: "Evidence on close", detail: "Attach the before and after score when the ticket closes", people: "actions" }] },
-  { id: "out-api", name: "Score API and BI export", kind: "Integration", category: "Data", direction: "Action out", about: "Organisation, department and team scores for your own dashboards and warehouse.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
-    controls: [{ id: "api", name: "Score API", detail: "Scores by person, team and department on request", people: "all" }, { id: "export", name: "Scheduled export", detail: "Nightly export of every score to your warehouse", people: "all" }] },
+  { id: "int-identity", name: "Identity provider", kind: "Integration", category: "Identity", direction: "Signal in", about: "Sign-in risk, admin roles and MFA strength across every account in the organisation.", auth: "OAuth", vendors: ["Microsoft Entra ID", "Okta", "Google Workspace", "Ping Identity", "OneLogin"], defaultConnected: true, lastSync: "1 Oct, 10:40", events30d: 9400 },
+  { id: "int-pam", name: "Privileged access management", kind: "Integration", category: "Identity", direction: "Signal in", about: "Where standing privilege sits in the organisation and how privileged sessions behave.", auth: "API key", vendors: ["CyberArk", "BeyondTrust", "Delinea"], defaultConnected: false, lastSync: "", events30d: 620 },
+  { id: "int-password", name: "Password manager", kind: "Integration", category: "Identity", direction: "Signal in", about: "Password health across the organisation, and vault adoption by team.", auth: "API key", vendors: ["1Password", "Keeper", "LastPass", "Bitwarden"], defaultConnected: false, lastSync: "", events30d: 1480 },
+  { id: "int-endpoint", name: "Endpoint protection", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Malware and risky-action alerts from every managed device.", auth: "API key", vendors: ["CrowdStrike Falcon", "Microsoft Defender for Endpoint", "SentinelOne", "Sophos"], defaultConnected: true, lastSync: "1 Oct, 10:42", events30d: 2150 },
+  { id: "int-mdm", name: "Device management", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Compliance and patch levels across every enrolled device.", auth: "OAuth", vendors: ["Microsoft Intune", "Jamf", "Workspace ONE"], defaultConnected: false, lastSync: "", events30d: 5200 },
+  { id: "int-data", name: "Data security", kind: "Integration", category: "Data", direction: "Signal in", about: "Data-handling events, and where access to sensitive data is concentrated.", auth: "API key", vendors: ["Microsoft Purview", "Varonis", "Netskope", "Forcepoint"], defaultConnected: false, lastSync: "", events30d: 1730 },
+  { id: "int-web", name: "Secure web gateway", kind: "Integration", category: "Web", direction: "Signal in", about: "Blocked sites and unsanctioned GenAI use across the organisation.", auth: "Log stream", vendors: ["Zscaler", "Netskope", "Cisco Umbrella", "Prisma Access"], defaultConnected: true, lastSync: "1 Oct, 10:44", events30d: 12800 },
+  { id: "int-browser", name: "Managed browser", kind: "Integration", category: "Browser", direction: "Signal in", about: "Risky extensions, data pasted into GenAI and password reuse, seen in managed browsers.", auth: "OAuth", vendors: ["Chrome Enterprise", "Microsoft Edge for Business", "Island"], defaultConnected: false, lastSync: "", events30d: 7300 },
+  { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", direction: "Signal in", about: "Impersonation attempts aimed at the organisation and misdirected outbound email.", auth: "API key", vendors: ["Proofpoint", "Mimecast", "Microsoft Defender for Office 365", "Abnormal"], defaultConnected: false, lastSync: "", events30d: 16400 },
+  { id: "int-collab", name: "Collaboration and chat", kind: "Integration", category: "Collaboration", direction: "Signal in", about: "Phishing clicked and reported in chat, and risky external sharing across workspaces.", auth: "OAuth", vendors: ["Microsoft Teams", "Slack", "Google Chat"], defaultConnected: false, lastSync: "", events30d: 3900 },
+  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, departments, joiners, movers, leavers and contractors.", auth: "SCIM and API key", vendors: ["Workday", "SAP SuccessFactors", "Oracle HCM", "Darwinbox", "BambooHR"], defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
+  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "Breached credentials and what is public about the organisation and its people.", auth: "API key", vendors: ["Have I Been Pwned", "SpyCloud", "Recorded Future"], defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
+  { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", direction: "Signal in", about: "The AI agents in use across the organisation, what they can reach and who has reviewed them.", auth: "OAuth", vendors: ["Microsoft Entra Agent ID", "Microsoft Copilot Studio", "Custom agent registry"], defaultConnected: false, lastSync: "", events30d: 880 },
+  { id: "out-access", name: "Conditional access", kind: "Integration", category: "Identity", direction: "Action out", about: "Keep directory groups in step with the score, so your own access policies act on them.", auth: "OAuth", vendors: ["Microsoft Entra ID", "Okta"], defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "stepup", name: "High risk group", detail: "Keep a directory group of High and Critical people. Your step-up sign-in policy targets the group.", people: "high" }, { id: "session", name: "Very attacked VIP group", detail: "Keep a directory group of very attacked VIPs for shorter sessions or stricter device rules.", people: "vipAttacked" }] },
+  { id: "out-mailpolicy", name: "Email policy", kind: "Integration", category: "Email", direction: "Action out", about: "Stricter mail filtering for the groups that are attacked most.", auth: "API key", vendors: ["Microsoft Exchange Online", "Proofpoint", "Mimecast"], defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "filter", name: "Strict filtering group", detail: "Keep the group your strict mail-filtering policy applies to in step with very attacked VIPs.", people: "vipAttacked" }, { id: "banner", name: "External sender banner group", detail: "Keep the group that sees the external-sender warning in step with High and Critical people.", people: "high" }] },
+  { id: "out-siem", name: "SIEM and SOAR", kind: "Integration", category: "Security operations", direction: "Action out", about: "Add human risk context to the alerts your SOC already works.", auth: "Webhook", vendors: ["Microsoft Sentinel", "Splunk", "IBM QRadar", "Google Security Operations"], defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "enrich", name: "Risk list for enrichment", detail: "Keep a live list of score, band and tags in your SIEM, so analysts see it on every alert.", people: "all" }, { id: "events", name: "Score change events", detail: "Send an event when someone enters High or Critical.", people: "high" }] },
+  { id: "out-itsm", name: "Ticketing", kind: "Integration", category: "Security operations", direction: "Action out", about: "A ticket for every approved action, closed with evidence.", auth: "API key", vendors: ["ServiceNow", "Jira Service Management", "Freshservice"], defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "ticket", name: "Ticket per action", detail: "Open a ticket when a recommended action is approved.", people: "actions" }, { id: "evidence", name: "Evidence on close", detail: "Read the ticket status back and attach the before and after score when it closes.", people: "actions" }] },
+  { id: "out-api", name: "Score API and BI export", kind: "Integration", category: "Data", direction: "Action out", about: "Organisation, department and team scores for your own dashboards and warehouse.", auth: "Issued key", vendors: ["REST API", "Snowflake", "Google BigQuery", "Amazon S3", "Microsoft Power BI"], defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "api", name: "Score API", detail: "Organisation, department, team and person scores on request.", people: "all" }, { id: "export", name: "Scheduled export", detail: "Nightly export of every score to your warehouse or BI tool.", people: "all" }] },
 ];
 
 const e = (id: string, name: string, pillar: ElementDef["pillar"], category: string, sourceId: string): ElementDef => ({
@@ -112,10 +113,10 @@ export const ELEMENTS: ElementDef[] = [
   e("prv-data", "Sensitive data access", "Privilege", "Data access", "int-data"),
   e("prv-senior", "Seniority", "Privilege", "Seniority and network centrality", "recipients"),
   e("prv-network", "Network centrality", "Privilege", "Seniority and network centrality", "recipients"),
-  e("hyg-password", "Weak or reused passwords", "Behaviour", "Security hygiene", "int-password"),
+  e("hyg-password", "Poor password health", "Behaviour", "Security hygiene", "int-password"),
   e("hyg-vault", "Password vault not adopted", "Behaviour", "Security hygiene", "int-password"),
   e("hyg-device", "Non-compliant device", "Behaviour", "Security hygiene", "int-mdm"),
-  e("hyg-patch", "Unpatched personal device", "Behaviour", "Security hygiene", "int-mdm"),
+  e("hyg-patch", "Unpatched device", "Behaviour", "Security hygiene", "int-mdm"),
   e("hyg-ext", "Risky browser extensions", "Behaviour", "Security hygiene", "int-browser"),
   e("hyg-reuse", "Password reuse on unknown sites", "Behaviour", "Security hygiene", "int-browser"),
   e("inc-paste", "Sensitive data pasted into GenAI", "Behaviour", "Real-world incidents", "int-browser"),
@@ -124,13 +125,13 @@ export const ELEMENTS: ElementDef[] = [
   e("inc-misdirect", "Misdirected email", "Behaviour", "Real-world incidents", "int-email"),
   e("rep-chat", "Chat phishing reported", "Reporting", "Reporting", "int-collab"),
   e("exp-imperson", "Impersonation attempts", "Exposure", "Targeting", "int-email"),
-  e("exp-contractor", "Contractor or third party", "Exposure", "Role visibility", "int-third"),
+  e("exp-contractor", "Contractor or third party", "Exposure", "Role visibility", "int-hr"),
   e("prv-standing", "Standing privilege", "Privilege", "Access and admin", "int-pam"),
   e("prv-session", "Privileged session anomalies", "Privilege", "Access and admin", "int-pam"),
-  e("prv-outlive", "Access outliving contract", "Privilege", "Access and admin", "int-third"),
+  e("prv-outlive", "Access outliving contract", "Privilege", "Access and admin", "int-hr"),
   e("ai-owned", "AI agents owned", "Privilege", "AI agents", "int-ai"),
   e("ai-perms", "Agent permissions", "Privilege", "AI agents", "int-ai"),
-  e("ai-inject", "Agent prompt-injection test results", "Privilege", "AI agents", "int-ai"),
+  e("ai-inject", "Agent access not reviewed", "Privilege", "AI agents", "int-ai"),
 ];
 
 /** Which simulation channel feeds each simulation element. */

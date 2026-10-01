@@ -9,10 +9,10 @@ export const TAGS = [
   { name: "Very attacked", about: "Receives far more targeted attacks than peers", sourceId: "esa", source: "Email Security (ESA)" },
   { name: "Externally exposed", about: "Credentials or personal data found in an external breach", sourceId: "int-osint", source: "OSINT monitoring" },
   { name: "Financial authority", about: "Can approve payments or change bank details", sourceId: "recipients", source: "Recipients" },
-  { name: "Sensitive data", about: "Works with confidential or regulated data every day", sourceId: "int-data", source: "Data loss prevention" },
+  { name: "Sensitive data", about: "Works with confidential or regulated data every day", sourceId: "int-data", source: "Data security" },
   { name: "Joiner or mover", about: "Joined or changed role in the last 90 days", sourceId: "int-hr", source: "HR system" },
   { name: "Leaver", about: "In a notice period or being offboarded", sourceId: "int-hr", source: "HR system" },
-  { name: "Contractor", about: "Contractor or vendor staff with system access", sourceId: "int-third", source: "Contractor and third-party directory" },
+  { name: "Contractor", about: "Contractor or vendor staff with system access", sourceId: "int-hr", source: "HR system" },
   { name: "Remote worker", about: "Works mostly outside the office network", sourceId: "int-hr", source: "HR system" },
 ] as const;
 export type Tag = (typeof TAGS)[number]["name"];
@@ -245,6 +245,25 @@ export function personActivity(p: Person): Activity[] {
   if (activityCache.size > 200) activityCache.clear();
   activityCache.set(p.id, activity);
   return activity;
+}
+
+/** Security groups read from the identity provider. Admins can map any of them to a tag. */
+export const DIRECTORY_GROUPS: { id: string; about: string; has: (p: Person) => boolean }[] = [
+  { id: "sg-exec-leadership", about: "Executive leadership team", has: (p) => p.flags.vip },
+  { id: "sg-domain-admins", about: "Domain and platform administrators", has: (p) => p.department === "IT" && p.flags.privileged },
+  { id: "sg-finance-approvers", about: "Payment approvers", has: (p) => p.department === "Finance" && p.level !== "Individual" },
+  { id: "sg-treasury", about: "Treasury desk", has: (p) => p.role === "Treasury analyst" },
+  { id: "sg-hr-confidential", about: "HR staff with access to employee records", has: (p) => p.department === "HR" },
+  { id: "sg-legal-privileged", about: "Legal staff handling privileged matters", has: (p) => p.department === "Legal" },
+  { id: "sg-procurement-vendors", about: "Vendor onboarding and bank detail changes", has: (p) => p.department === "Procurement" && p.role !== "Buyer" },
+  { id: "sg-contractors", about: "All contractor accounts", has: (p) => p.flags.contractor },
+  { id: "sg-remote-workforce", about: "Remote-first staff", has: (p) => p.flags.remote },
+];
+const groupCache = new Map<string, Set<string>>();
+export function groupMembers(id: string): Set<string> {
+  let m = groupCache.get(id);
+  if (!m) { const g = DIRECTORY_GROUPS.find((x) => x.id === id); m = new Set(g ? PEOPLE.filter(g.has).map((p) => p.id) : []); groupCache.set(id, m); }
+  return m;
 }
 
 export { LURES };

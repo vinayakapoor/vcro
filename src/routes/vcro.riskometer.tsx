@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, StatCard } from "@/features/shared/widget";
 import { useReady } from "@/features/shared/prefs";
 import {
-  ActionsCard, ConcentrationCard, RiskSpreadingCard, HeatmapCard, SignalsCard, WeakestSignalsCard, MatrixCard, MoversCard, RiskometerCard, SusceptibilityCard, TreemapCard, TrendCard,
+  ActionsCard, BandsCard, ConcentrationCard, DriversCard, RiskSpreadingCard, HeatmapCard, SignalsCard, WeakestSignalsCard, MatrixCard, MoversCard, RiskometerCard, SusceptibilityCard, TreemapCard, TrendCard,
 } from "@/features/riskometer/widgets";
 import { addReport, alerts, deptHeatmap, fmt, managerInvolvement, orgSummary, pct, riskSpreaders, signalCoverage, useSettings, useSignals, weakestSignals } from "@/lib/api";
 import { buildReport } from "@/lib/reports";
@@ -59,18 +59,23 @@ function RiskometerPage() {
 
       <div className="grid gap-4 lg:grid-cols-12">
         <RiskometerCard s={s} ready={ready} />
-        <div className="flex flex-col gap-4 lg:col-span-7">
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="flex flex-col gap-4 lg:col-span-8">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             <StatCard ready={ready} label="High or Critical" icon={UserRoundX} value={fmt(s.highCount)} caption={`${pct(s.highShare)} of people · ${fmt(s.enteredHigh)} new this month`}
-              onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "top-risk" } })} />
-            <StatCard ready={ready} label="Report rate" icon={ShieldCheck} value={pct(s.reportRate)} caption={`of simulated attacks reported · ${pct(s.failRate)} failed`} />
-            <StatCard ready={ready} label="Repeat clickers" icon={Repeat} value={fmt(s.repeatCount)} caption="Failed 2 or more simulations in 180 days"
+              onClick={() => navigate({ to: "/vcro/people", search: { band: "High" } })} />
+            <StatCard ready={ready} label="Report rate" icon={ShieldCheck} value={pct(s.reportRate)} caption={`of simulations reported · ${pct(s.failRate)} failed`} />
+            <StatCard ready={ready} label="Repeat clickers" icon={Repeat} value={fmt(s.repeatCount)} caption="Failed 2 or more in 180 days"
               onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "repeat-clickers" } })} />
-            <StatCard ready={ready} label="Very attacked VIPs" icon={Crosshair} value={fmt(s.vipAttacked)} caption="Senior people who are heavily targeted"
+            <StatCard ready={ready} label="Very attacked VIPs" icon={Crosshair} value={fmt(s.vipAttacked)} caption="Senior and heavily targeted"
               onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "very-attacked-vips" } })} />
           </div>
-          <SignalsCard ready={ready} cov={cov} />
+          <div className="grid flex-1 gap-4 md:grid-cols-2">
+            <BandsCard s={s} ready={ready} />
+            <DriversCard s={s} ready={ready} />
+          </div>
         </div>
+
+        <SignalsCard ready={ready} cov={cov} />
 
         <TrendCard ready={ready} />
         <MoversCard s={s} ready={ready} />

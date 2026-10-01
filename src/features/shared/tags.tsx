@@ -7,7 +7,7 @@ import { TAGS } from "@/lib/api";
  * A person's tags, rolled up: the first few as badges, the rest behind a "+N" that opens the full list
  * with what each tag means and which source applied it.
  */
-export function TagList({ tags, custom = [], max = 1, wrap = false }: { tags: readonly string[]; custom?: readonly string[]; max?: number; wrap?: boolean }) {
+export function TagList({ tags, custom = [], max = 1, wrap = false, notes = {} }: { tags: readonly string[]; custom?: readonly string[]; max?: number; wrap?: boolean; notes?: Partial<Record<string, string>> }) {
   const all = [...tags, ...custom];
   if (!all.length) return <span className="text-xs text-muted-foreground">No tags</span>;
   const rest = all.length - max;
@@ -31,7 +31,7 @@ export function TagList({ tags, custom = [], max = 1, wrap = false }: { tags: re
               <li key={t} className="flex items-start gap-2.5 px-3 py-2">
                 <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(t)}</span>
                 <span className="min-w-0 text-sm"><span className="block font-medium">{t}</span>
-                  <span className="block text-xs text-muted-foreground">{def ? `${def.about}. Applied automatically from ${def.source}.` : "Your tag, applied by hand."}</span></span>
+                  <span className="block text-xs text-muted-foreground">{def ? `${def.about}. ${notes[t] ? `${notes[t]}.` : `Applied automatically from ${def.source}.`}` : "Your tag."}</span></span>
               </li>
             );
           })}

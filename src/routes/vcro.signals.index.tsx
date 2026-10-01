@@ -102,12 +102,13 @@ function SignalsPage() {
                     <Link key={m.id} to="/vcro/signals/$id" params={{ id: m.id }}
                       className="group flex flex-col gap-2 rounded-xl border bg-card p-4 transition hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <div className="flex items-start justify-between gap-2"><span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{m.category}</span><StatusBadge on={on} offText="Available" /></div>
-                      <span className="text-sm font-semibold">{m.name}</span>
+                      <span className="text-sm font-semibold">{m.name}{on && cfg && <span className="font-normal text-muted-foreground"> · {cfg.vendor}</span>}</span>
                       <p className="text-xs text-muted-foreground">{m.about}</p>
                       <div className="flex flex-wrap gap-1">
                         {dir === "Signal in" ? gain.signals.map((n) => <span key={n} className="rounded-md border bg-muted px-1.5 py-0.5 text-[11px]">{n}</span>)
                           : m.controls?.map((c) => <span key={c.id} className="rounded-md border bg-muted px-1.5 py-0.5 text-[11px]">{c.name}</span>)}
                       </div>
+                      {!on && <div className="truncate text-[11px] text-muted-foreground">Works with {m.vendors?.slice(0, 3).join(", ")}{(m.vendors?.length ?? 0) > 3 && ` +${m.vendors!.length - 3}`}</div>}
                       <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-xs">
                         <span className="text-muted-foreground">{on ? `Synced ${cfg ? formatStamp(cfg.lastSync) : m.lastSync}` : dir === "Signal in" ? `Confidence ${st.confidence}% → ${gain.confidence}%` : `${m.controls?.length ?? 0} controls`}</span>
                         <span className="inline-flex items-center gap-1 font-medium">{on ? "Manage" : "Connect"}<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>

@@ -5,14 +5,17 @@ import {
   DEPARTMENTS, ELEMENTS, HEADCOUNT, INTERVENTIONS, LOCATIONS, MONTHS, SIM_ELEMENT_CHANNEL, SOURCES, TEMPLATES,
   TODAY, WORKFLOWS, type Department,
 } from "@/data/catalogue";
-import { PEOPLE, PERSON_BY_ID, TAGS, type Finding, type Person, type Tag } from "@/data/people";
+import { DIRECTORY_GROUPS, PEOPLE, PERSON_BY_ID, TAGS, groupMembers, type Finding, type Person, type Tag } from "@/data/people";
 import {
   bandFor, CHANNELS, computeScore, confidenceFor, DEFAULT_CONFIG, elementWeights, failed, isImpulsive, LURES, rates, scoreOnly,
   simulationRisk, skillScore, type Band, type Channel, type Lure, type Readings, type ScoreResult, type ScoringConfig, type SimEvent,
 } from "./scoring";
 
 // ---------- Store ----------
-export type SignalState = { connected: Set<string>; disabled: Set<string>; active: Set<string>; weights: Record<string, number>; config: ScoringConfig };
+/** Admin changes to built-in tags: added or removed by hand per person, and directory groups mapped to a tag. */
+export type TagEdits = { add: Record<string, Tag[]>; remove: Record<string, Tag[]>; maps: { group: string; tag: Tag }[] };
+const NO_EDITS: TagEdits = { add: {}, remove: {}, maps: [] };
+export type SignalState = { connected: Set<string>; disabled: Set<string>; active: Set<string>; weights: Record<string, number>; config: ScoringConfig; edits: TagEdits };
 export type Currency = "USD" | "INR" | "AED";
 export type Settings = {
   alerts: { enterHigh: boolean; orgRise: number; weekly: boolean; recipients: string };
@@ -32,8 +35,8 @@ export type Run = { id: string; key: string; workflow: string; target: string; p
 export type ReportRun = { id: string; template: string; name: string; at: string; score: number; filename: string; mime: string; content: string };
 
 /** A tag an admin created. Members are added by hand, one at a time or in bulk. */
-export type CustomTag = { id: string; name: string; about: string; members: string[] };
-export type ConnectorConfig = { connectedAt: string; account: string; frequency: string; scope: string; lastSync: string; controls: Record<string, boolean> };
+export type CustomTag = { id: string; name: string; about: string; members: string[]; /** Directory groups whose members carry this tag automatically. */ groups?: string[] };
+export type ConnectorConfig = { connectedAt: string; vendor: string; account: string; frequency: string; scope: string; lastSync: string; controls: Record<string, boolean> };
 type Store = {
   signals: SignalState; settings: Settings; watchlists: SavedWatchlist[]; pinned: string[]; runs: Run[]; reports: ReportRun[]; visited: string[];
   tags: CustomTag[]; connectors: Record<string, ConnectorConfig>;
@@ -42,8 +45,8 @@ type Store = {
 function activeFor(connected: Set<string>, disabled: Set<string>) {
   return new Set(ELEMENTS.filter((e) => connected.has(e.sourceId) && !disabled.has(e.id)).map((e) => e.id));
 }
-function makeSignals(connected: Set<string>, disabled: Set<string>, weights: Record<string, number>, config: ScoringConfig): SignalState {
-  return { connected, disabled, active: activeFor(connected, disabled), weights, config };
+function makeSignals(connected: Set<string>, disabled: Set<string>, weights: Record<string, number>, config: ScoringConfig, edits?: TagEdits): SignalState {
+  return { connected, disabled, active: activeFor(connected, disabled), weights, config, edits: edits ?? store.signals.edits };
 }
 export const DEFAULT_SETTINGS: Settings = {
   alerts: { enterHigh: true, orgRise: 5, weekly: true, recipients: "" },
@@ -51,21 +54,29 @@ export const DEFAULT_SETTINGS: Settings = {
   costPerIncident: null, targetScore: null, currency: "USD", privacy: false, minGroupSize: 5,
 };
 const DEFAULT_STORE: Store = {
-  signals: makeSignals(new Set(SOURCES.filter((s) => s.defaultConnected).map((s) => s.id)), new Set(), {}, DEFAULT_CONFIG),
-  settings: DEFAULT_SETTINGS, watchlists: [], pinned: [], runs: [], reports: [], visited: [], tags: [], connectors: {},
+  signals: makeSignals(new Set(SOURCES.filter((s) => s.defaultConnected).map((s) => s.id)), new Set(), {}, DEFAULT_CONFIG, NO_EDITS),
+  settings: DEFAULT_SETTINGS, watchlists: [], pinned: [], runs: [], reports: [], visited: [], tags: [],
+  // The demo tenant arrives with five integrations already set up.
+  connectors: Object.fromEntries(([
+    ["int-identity", "Microsoft Entra ID", "demoenterprise.com", "2026-06-12T09:10:00Z", "2026-10-01T10:40:00Z"],
+    ["int-endpoint", "CrowdStrike Falcon", "https://api.eu-1.crowdstrike.com", "2026-06-18T11:25:00Z", "2026-10-01T10:42:00Z"],
+    ["int-web", "Zscaler", "Log stream", "2026-07-02T08:05:00Z", "2026-10-01T10:44:00Z"],
+    ["int-hr", "Workday", "https://wd3.myworkday.com/demoenterprise/scim/v2", "2026-06-12T09:40:00Z", "2026-10-01T06:00:00Z"],
+    ["int-osint", "Have I Been Pwned", "https://haveibeenpwned.com/api/v3", "2026-06-20T14:00:00Z", "2026-09-30T23:00:00Z"],
+  ] as const).map(([id, vendor, account, connectedAt, lastSync]) => [id, { vendor, account, connectedAt, lastSync, frequency: id === "int-hr" || id === "int-osint" ? "Daily" : "Hourly", scope: "All people", controls: {} }])),
 };
 
 let store: Store = DEFAULT_STORE;
 const listeners = new Set<() => void>();
 // Bump the version when the source catalogue changes, so old saved connections do not hide new defaults.
-const KEY = "hf.vcro.v2";
+const KEY = "hf.vcro.v3";
 
 function persist() {
   if (typeof localStorage === "undefined") return;
   const { signals, ...rest } = store;
   try {
     localStorage.setItem(KEY, JSON.stringify({
-      ...rest, signals: { connected: [...signals.connected], disabled: [...signals.disabled], weights: signals.weights, config: signals.config },
+      ...rest, signals: { connected: [...signals.connected], disabled: [...signals.disabled], weights: signals.weights, config: signals.config, edits: signals.edits },
     }));
   } catch { /* storage full or blocked: state stays in memory for this session */ }
 }
@@ -88,10 +99,10 @@ export function hydrateStore() {
     store = {
       signals: makeSignals(
         new Set((sg.connected as string[] | undefined)?.filter((x) => known.has(x)) ?? DEFAULT_STORE.signals.connected),
-        new Set(sg.disabled ?? []), sg.weights ?? {}, { ...DEFAULT_CONFIG, ...sg.config },
+        new Set(sg.disabled ?? []), sg.weights ?? {}, { ...DEFAULT_CONFIG, ...sg.config }, { ...NO_EDITS, ...sg.edits },
       ),
       settings: { ...DEFAULT_SETTINGS, ...d.settings, alerts: { ...DEFAULT_SETTINGS.alerts, ...d.settings?.alerts }, automation: { ...DEFAULT_SETTINGS.automation, ...d.settings?.automation } },
-      watchlists: d.watchlists ?? [], pinned: d.pinned ?? [], runs: d.runs ?? [], reports: d.reports ?? [], visited: d.visited ?? [], tags: d.tags ?? [], connectors: d.connectors ?? {},
+      watchlists: d.watchlists ?? [], pinned: d.pinned ?? [], runs: d.runs ?? [], reports: d.reports ?? [], visited: d.visited ?? [], tags: d.tags ?? [], connectors: { ...DEFAULT_STORE.connectors, ...d.connectors },
     };
     listeners.forEach((l) => l());
   } catch { /* unreadable saved state: keep defaults */ }
@@ -168,6 +179,20 @@ export function disconnectSource(id: string) {
   update({ signals: makeSignals(c, S().disabled, S().weights, S().config), connectors: rest });
 }
 export const patchConnector = (id: string, p: Partial<ConnectorConfig>) => { const cur = store.connectors[id]; if (cur) update({ connectors: { ...store.connectors, [id]: { ...cur, ...p } } }); };
+const withEdits = (edits: TagEdits) => update({ signals: makeSignals(S().connected, S().disabled, S().weights, S().config, edits) });
+const without = (m: Record<string, Tag[]>, id: string, tag: Tag) => { const l = (m[id] ?? []).filter((t) => t !== tag); const { [id]: _, ...rest } = m; return l.length ? { ...rest, [id]: l } : rest; };
+/** Add or remove a built-in tag for one person by hand, or go back to what the source says. */
+export function overrideTag(id: string, tag: Tag, mode: "add" | "remove" | "auto") {
+  const e = S().edits;
+  const add = without(e.add, id, tag), remove = without(e.remove, id, tag);
+  if (mode === "add") add[id] = [...(add[id] ?? []), tag];
+  if (mode === "remove") remove[id] = [...(remove[id] ?? []), tag];
+  withEdits({ ...e, add, remove });
+}
+/** Everyone in a directory group gets this built-in tag. */
+export const mapGroupToTag = (group: string, tag: Tag) => withEdits({ ...S().edits, maps: [...S().edits.maps.filter((m) => !(m.group === group && m.tag === tag)), { group, tag }] });
+export const unmapGroup = (group: string, tag: Tag) => withEdits({ ...S().edits, maps: S().edits.maps.filter((m) => !(m.group === group && m.tag === tag)) });
+export const setTagGroups = (id: string, groups: string[]) => update({ tags: store.tags.map((t) => (t.id === id ? { ...t, groups } : t)) });
 export const toggleElement = (id: string, on: boolean) => update({ signals: previewElement(id, on) });
 /** Record a workflow request. Execution belongs to the Workflows module; vCRO keeps the request and its status. */
 export function queueRun(key: string, workflow: string, target: string, people: number) {
@@ -199,6 +224,8 @@ export type ChannelStat = { channel: Channel; attempts: number; failures: number
 export type ScoredPerson = Person & ScoreResult & {
   /** Built-in tags this person carries, from connected sources only. */
   tags: Tag[];
+  /** Where a tag came from when it was not the source's own rule: added by hand, or a directory group. */
+  tagNotes: Partial<Record<Tag, string>>;
   prev: number | null;
   change: number | null;
   /** Today's readings from connected, switched-on signals only. Nothing from an unconnected source is in here. */
@@ -269,6 +296,7 @@ function scored(s: SignalState): Scored {
     const live = liveChannels(s.active);
     const driversNow: Record<string, number> = {}, driversPrev: Record<string, number> = {};
     let nNow = 0, nPrev = 0;
+    const mapped = s.edits.maps.map((m) => ({ ...m, members: groupMembers(m.group) }));
     const people = PEOPLE.map((p): ScoredPerson => {
       const all = readingsAt(p, 0, s.config);
       const now: Readings = {};
@@ -284,7 +312,12 @@ function scored(s: SignalState): Scored {
       if (v("prv-fin") > 60) tags.push("Financial authority");
       if (v("prv-data") > 60) tags.push("Sensitive data");
       if (c.has("int-hr")) { if (f.joiner) tags.push("Joiner or mover"); if (f.leaver) tags.push("Leaver"); if (f.remote) tags.push("Remote worker"); }
-      if (f.contractor && c.has("int-third")) tags.push("Contractor");
+      if (f.contractor && c.has("int-hr")) tags.push("Contractor");
+      const tagNotes: Partial<Record<Tag, string>> = {};
+      if (c.has("int-identity")) for (const m of mapped) if (m.members.has(p.id) && !tags.includes(m.tag)) { tags.push(m.tag); tagNotes[m.tag] = `From directory group ${m.group}`; }
+      for (const t of s.edits.add[p.id] ?? []) if (!tags.includes(t)) { tags.push(t); tagNotes[t] = "Added by hand"; }
+      const gone = s.edits.remove[p.id];
+      if (gone) for (const t of gone) { const i = tags.indexOf(t); if (i >= 0) tags.splice(i, 1); }
       const before = computeScore(ELEMENTS, readingsAt(p, 1, s.config), s.active, s.weights, s.config);
       if (cur.score !== null) { nNow++; for (const c of cur.contributions) driversNow[c.category] = (driversNow[c.category] ?? 0) + c.points * cur.impact; }
       if (before.score !== null) { nPrev++; for (const c of before.contributions) driversPrev[c.category] = (driversPrev[c.category] ?? 0) + c.points * before.impact; }
@@ -303,7 +336,7 @@ function scored(s: SignalState): Scored {
       let topDriver: string | null = null, top = 0;
       for (const c of cur.contributions) if (c.points > top) { top = c.points; topDriver = c.category; }
       return {
-        ...p, ...cur, tags, now, prev: before.score,
+        ...p, ...cur, tags, tagNotes, now, prev: before.score,
         change: cur.score !== null && before.score !== null ? cur.score - before.score : null,
         channels, lures, weakestChannel: weakest,
         weakestSignal: ws ? { id: ws.id, name: ws.name, category: ws.category, value: Math.round(now[ws.id]!.value) } : null,
@@ -667,10 +700,15 @@ export function describeRule(r: WatchlistRule) {
   const parts = [r.department && `Department ${r.department}`, r.location && `Location ${r.location}`, t.length && `Tagged ${t.join(" and ")}`, r.minBand && `${r.minBand} or above`, r.rising && "Score rising", r.repeatClicker && "2 or more fails in 180 days"].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Everyone scored";
 }
-/** Names of the admin-made tags each person carries. */
-export function customTagsByPerson(tags: CustomTag[]): Map<string, string[]> {
+/** Names of the admin-made tags each person carries: added by hand, or through a mapped directory group. */
+export function customTagsByPerson(tags: CustomTag[], s: SignalState): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const t of tags) for (const m of t.members) { const l = out.get(m); l ? l.push(t.name) : out.set(m, [t.name]); }
+  const put = (id: string, name: string) => { const l = out.get(id); if (!l) out.set(id, [name]); else if (!l.includes(name)) l.push(name); };
+  const directory = s.connected.has("int-identity");
+  for (const t of tags) {
+    for (const m of t.members) put(m, t.name);
+    if (directory) for (const g of t.groups ?? []) for (const m of groupMembers(g)) put(m, t.name);
+  }
   return out;
 }
 const ruleMatch = (r: WatchlistRule, custom: Map<string, string[]>) => {
@@ -681,7 +719,7 @@ const ruleMatch = (r: WatchlistRule, custom: Map<string, string[]>) => {
     && (!r.minBand || (p.score !== null && p.score >= BAND_MIN[r.minBand]!))
     && (!r.rising || (p.change ?? 0) > 0) && (!r.repeatClicker || p.fails180 >= 2);
 };
-export const countRule = (s: SignalState, r: WatchlistRule, tags: CustomTag[]) => getPeople(s).filter(ruleMatch(r, customTagsByPerson(tags))).length;
+export const countRule = (s: SignalState, r: WatchlistRule, tags: CustomTag[]) => getPeople(s).filter(ruleMatch(r, customTagsByPerson(tags, s))).length;
 
 function builtIn(s: SignalState): WatchlistDef[] {
   const sc = getPeople(s).filter((x) => x.score !== null).map((x) => x.score!).sort((a, b) => b - a);
@@ -705,11 +743,11 @@ function builtIn(s: SignalState): WatchlistDef[] {
 export function watchlistSummary(s: SignalState, saved: SavedWatchlist[], pinned: string[], tags: CustomTag[]) {
   const people = getPeople(s);
   const pin = new Set(pinned);
-  const custom = customTagsByPerson(tags);
+  const custom = customTagsByPerson(tags, s);
   const defs: WatchlistDef[] = [
     ...builtIn(s),
     ...(pinned.length ? [{ id: "pinned", name: "Pinned by you", rule: "People you added by hand", kind: "own" as const, custom: true, match: (p: ScoredPerson) => pin.has(p.id) }] : []),
-    ...tags.map((t) => { const m = new Set(t.members); return { id: t.id, name: t.name, rule: t.about || "Your tag. Members are added by hand.", kind: "own" as const, custom: true, match: (p: ScoredPerson) => m.has(p.id) }; }),
+    ...tags.map((t) => ({ id: t.id, name: t.name, rule: t.about || (t.groups?.length ? `Your tag. Filled from ${t.groups.join(", ")}.` : "Your tag. Members are added by hand."), kind: "own" as const, custom: true, match: (p: ScoredPerson) => !!custom.get(p.id)?.includes(t.name) })),
     ...saved.map((w) => ({ id: w.id, name: w.name, rule: describeRule(w.rule), kind: "own" as const, custom: true, match: ruleMatch(w.rule, custom) })),
   ];
   return defs.map((w) => {
@@ -768,5 +806,5 @@ export const initials = (name: string) => name.split(" ").map((x) => x[0]).slice
 
 export const PREV_MONTH = MONTHS[10]!;
 export { ELEMENTS, SOURCES, MONTHS, DEPARTMENTS, LOCATIONS, CHANNELS, LURES, TEMPLATES, WORKFLOWS };
-export { TAGS };
+export { DIRECTORY_GROUPS, TAGS, groupMembers };
 export type { Tag, Department, Band, Channel, Lure };
