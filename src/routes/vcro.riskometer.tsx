@@ -75,7 +75,7 @@ function RiskometerPage() {
           </div>
         </div>
 
-        <SignalsCard ready={ready} cov={cov} />
+        <SignalsCard ready={ready} cov={cov} s={s} />
 
         <TrendCard ready={ready} />
         <MoversCard s={s} ready={ready} />

@@ -484,6 +484,13 @@ export function orgSummary(s: SignalState) {
       vipAttacked: people.filter((p) => p.tags.includes("VIP") && p.tags.includes("Very attacked")).length,
       lowConfidence: sc.filter((p) => p.lowConfidence).length,
       departments: deptStats(s), pareto, drivers,
+      /** Average points each driver adds to a person's score today. They add up to the organisation score. */
+      makeup: (() => {
+        const up = Object.entries(driversNow).filter(([c, v]) => c !== "Reporting offset" && v > 0).map(([category, points]) => ({ category, points: Math.round(points * 10) / 10 })).sort((a, b) => b.points - a.points);
+        // The reporting credit is whatever separates the drivers from the actual average score, so the list always adds up.
+        const credit = Math.round((mean(sc.map((p) => p.score!)) - up.reduce((a, d) => a + d.points, 0)) * 10) / 10;
+        return credit < 0 ? [...up, { category: "Reporting offset", points: credit }] : up;
+      })(),
       concentration: { people: Math.round((topN / (sorted.length || 1)) * 100), risk: Math.round((sorted.slice(0, topN).reduce((a, b) => a + b, 0) / totalRisk) * 100), count: topN },
       channels: channelStats(allSims), lures: lureStats(allSims), simsLive: allSims.length > 0,
     };
@@ -692,12 +699,17 @@ export function signalCoverage(s: SignalState) {
   const sources = SOURCES.filter((x) => x.direction !== "Action out").map((x) => ({ ...x, on: s.connected.has(x.id) }));
   return { pillars, sources, events30d: sources.filter((x) => x.on).reduce((a, x) => a + x.events30d, 0), missing: sources.filter((x) => !x.on && x.kind === "Integration") };
 }
-/** Connected sources ranked by how much of the score each one supplies. */
-export function contributingSources(s: SignalState, connectors: Record<string, ConnectorConfig>) {
-  return SOURCES.filter((x) => x.direction !== "Action out" && s.connected.has(x.id)).map((x) => {
-    const live = ELEMENTS.filter((e) => e.sourceId === x.id && s.active.has(e.id));
-    return { id: x.id, name: x.name, kind: x.kind, product: x.kind === "Module" ? "HumanFirewall module" : connectors[x.id]?.vendor ?? "", signals: live.length, share: Math.round(live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) * 1000) / 10, names: live.map((e) => e.name) };
-  }).filter((x) => x.signals > 0).sort((a, b) => b.share - a.share);
+/** For each driver of the score: the connected sources its signals come from, by product name. */
+export function driverSources(s: SignalState, connectors: Record<string, ConnectorConfig>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const e of ELEMENTS) {
+    if (!s.active.has(e.id)) continue;
+    const src = SOURCES.find((x) => x.id === e.sourceId)!;
+    const name = src.kind === "Module" ? src.name : connectors[src.id]?.vendor ?? src.name;
+    const key = e.pillar === "Reporting" ? "Reporting offset" : e.category;
+    if (!(out[key] ??= []).includes(name)) out[key]!.push(name);
+  }
+  return out;
 }
 /** Unconnected sources ranked by how much confidence each would add. */
 export function bestNextSources(s: SignalState) {

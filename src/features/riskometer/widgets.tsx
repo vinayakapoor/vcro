@@ -20,7 +20,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  BENCHMARK, DEPARTMENTS, LURES, PREV_MONTH, contributingSources, signalStats, useConnectors, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  BENCHMARK, DEPARTMENTS, LURES, PREV_MONTH, driverSources, signalStats, useConnectors, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -469,12 +469,13 @@ const TILE_INFO: Record<string, string> = {
   "AI identities": "The AI agents people own, what those agents can reach and whether their access has been reviewed.",
 };
 
-export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage> }) {
+export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage>; s: Summary }) {
   const sig = useSignals();
   const st = signalStats(sig);
   const connectors = useConnectors();
-  const [all, setAll] = useState(false);
-  const live = ready ? contributingSources(sig, connectors) : [];
+  const from = ready ? driverSources(sig, connectors) : {};
+  const up = s.makeup.filter((d) => d.points > 0);
+  const credit = s.makeup.find((d) => d.points < 0);
   const next = ready ? bestNextSources(sig) : [];
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
@@ -498,20 +499,30 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
       <div className="mt-5 grid gap-6 border-t pt-5 lg:grid-cols-2">
         <div className="min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-sm font-semibold">Contributing now</h3>
-            <span className="text-xs tabular-nums text-muted-foreground">{st.modules.on} modules · {st.inbound.on} integrations · {fmt(cov.events30d)} events in 30 days</span>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">What makes up the score of {s.score}
+              <InfoTip label="What makes up the score" text="The average points each driver adds to a person's score today, after privilege is applied. Added together, less the credit for reporting, they give the organisation score. Under each driver are the sources its data comes from." /></h3>
+            <span className="text-xs text-muted-foreground">Points</span>
           </div>
-          <ul className="mt-3 space-y-2.5">
-            {(all ? live : live.slice(0, 5)).map((c) => (
-              <li key={c.id} className="grid grid-cols-[minmax(0,1fr)_88px_44px] items-center gap-3 text-sm" title={c.names.join(", ")}>
-                <span className="min-w-0"><span className="block truncate font-medium">{c.name}</span><span className="block truncate text-xs text-muted-foreground">{c.product} · {c.signals} {c.signals === 1 ? "signal" : "signals"}</span></span>
-                <span className="h-1.5 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground" style={{ width: `${(c.share / (live[0]?.share || 1)) * 100}%` }} /></span>
-                <span className="text-right text-xs font-semibold tabular-nums">{c.share.toFixed(1)}%</span>
+          <ul className="mt-3 space-y-3">
+            {up.slice(0, 5).map((d) => (
+              <li key={d.category} className="grid grid-cols-[minmax(0,1fr)_96px_40px] items-center gap-3 text-sm">
+                <span className="min-w-0"><span className="block truncate font-medium">{d.category}</span><span className="block truncate text-xs text-muted-foreground">From {from[d.category]?.join(", ") ?? "connected sources"}</span></span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground" style={{ width: `${(d.points / (up[0]?.points || 1)) * 100}%` }} /></span>
+                <span className="text-right font-semibold tabular-nums">{d.points.toFixed(1)}</span>
               </li>
             ))}
+            {up.length > 5 && (
+              <li className="grid grid-cols-[minmax(0,1fr)_96px_40px] items-center gap-3 text-sm text-muted-foreground">
+                <span className="truncate">{up.length - 5} smaller drivers: {up.slice(5).map((d) => d.category).join(", ")}</span><span /><span className="text-right tabular-nums">{up.slice(5).reduce((a, d) => a + d.points, 0).toFixed(1)}</span>
+              </li>
+            )}
+            {credit && (
+              <li className="grid grid-cols-[minmax(0,1fr)_96px_40px] items-center gap-3 border-t pt-3 text-sm">
+                <span className="min-w-0"><span className="block truncate font-medium">Credit for reporting threats</span><span className="block truncate text-xs text-muted-foreground">From {from["Reporting offset"]?.join(", ")}</span></span>
+                <span /><span className="text-right font-semibold tabular-nums text-success">{credit.points.toFixed(1)}</span>
+              </li>
+            )}
           </ul>
-          {live.length > 5 && <button type="button" onClick={() => setAll((v) => !v)} aria-expanded={all} className="mt-3 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2">{all ? "Show the top 5" : `Show all ${live.length} contributing sources`}</button>}
-          <p className="mt-3 text-xs text-muted-foreground">The percentage is each source's share of the scoring model. Together they make up the {st.confidence}% confidence.</p>
         </div>
         <div className="min-w-0">
           <div className="flex items-baseline justify-between gap-2">
