@@ -50,33 +50,54 @@ export function ConfidenceLine({ confidence, active, total }: { confidence: numb
   );
 }
 
-export function PillarMeters({ pillars }: { pillars: Record<"Behaviour" | "Exposure" | "Privilege", number> }) {
+export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "Exposure" | "Privilege", number>; ai: number | null }) {
+  const rows: [string, number | null][] = [...(Object.entries(pillars) as [string, number][]), ["AI identities", ai]];
   return (
     <div className="space-y-2.5">
-      {(Object.entries(pillars) as [string, number][]).map(([k, v]) => (
+      {rows.map(([k, v]) => v === null ? (
+        <div key={k} className="grid grid-cols-[84px_1fr_auto] items-center gap-3 text-sm text-muted-foreground">
+          <span>{k}</span>
+          <span className="h-1.5 rounded-full bg-muted" />
+          <Link to="/vcro/signals/$id" params={{ id: "int-ai" }} className="text-xs font-medium text-foreground underline underline-offset-2">Connect</Link>
+        </div>
+      ) : (
         <div key={k} className="grid grid-cols-[84px_1fr_32px] items-center gap-3 text-sm">
           <span>{k}</span>
           <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${v}%`, background: BAND_VAR[bandFor(v)] }} /></span>
           <span className="text-right tabular-nums">{v}</span>
         </div>
       ))}
-      <div className="grid grid-cols-[84px_1fr_auto] items-center gap-3 text-sm text-muted-foreground">
-        <span>AI identities</span>
-        <span className="h-1.5 rounded-full bg-muted" />
-        <StatusBadge on={false} />
-      </div>
     </div>
   );
 }
 
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
   const top = s.drivers.slice(0, 4);
+  const max = Math.max(1, ...s.bands.map((b) => b.count));
   return (
     <Widget title="Riskometer" ready={ready} className="lg:col-span-5" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
       <Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} />
-      <div className="mt-5"><PillarMeters pillars={s.pillars} /></div>
+
+      <div className="mt-5 border-t pt-4">
+        <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>People by band</span><span className="tabular-nums">{fmt(s.scored)} scored</span></div>
+        <div className="grid grid-cols-5 gap-1.5">
+          {s.bands.map((b) => (
+            <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`${fmt(b.count)} people in ${b.band}`}
+              className="group rounded-lg border p-2 transition-colors hover:border-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <div className="flex h-9 items-end"><div className="w-full rounded-sm transition-opacity group-hover:opacity-80" style={{ height: `${Math.max(6, (b.count / max) * 100)}%`, background: BAND_VAR[b.band] }} /></div>
+              <div className="mt-1.5 truncate text-sm font-semibold tabular-nums">{fmt(b.count)}</div>
+              <div className="truncate text-[11px] text-muted-foreground">{b.band}</div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 border-t pt-4">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">What drives it</div>
+        <PillarMeters pillars={s.pillars} ai={s.aiAgents} />
+      </div>
       <div className="mt-4 border-t pt-3"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
-      <div className="mt-4 rounded-xl border bg-muted/30 p-3">
+      <div className="mt-3 rounded-xl border bg-muted/30 p-3">
         <div className="flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>What moved the score since {PREV_MONTH}</span><span className="tabular-nums">{s.prev} to {s.score}</span>
         </div>
@@ -438,11 +459,13 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
   const [open, setOpen] = useState(false);
   const live = cov.sources.filter((x) => x.on);
   const off = cov.sources.filter((x) => !x.on);
-  const chip = (x: (typeof cov.sources)[number]) => (
-    <span key={x.id} title={x.on ? `Last sync ${x.lastSync}` : "Not connected"}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs ${x.on ? "bg-card" : "border-dashed text-muted-foreground"}`}>
+  const chip = (x: (typeof cov.sources)[number]) => x.kind === "Integration" ? (
+    <Link key={x.id} to="/vcro/signals/$id" params={{ id: x.id }} title={x.on ? "Manage" : "Connect"}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors hover:border-foreground/30 hover:text-foreground ${x.on ? "bg-card" : "border-dashed text-muted-foreground"}`}>
       <span className={`size-1.5 rounded-full ${x.on ? "bg-success" : "bg-muted-foreground/40"}`} aria-hidden />{x.name}
-    </span>
+    </Link>
+  ) : (
+    <span key={x.id} className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-xs"><span className="size-1.5 rounded-full bg-success" aria-hidden />{x.name}</span>
   );
   return (
     <Widget title="Signals feeding the score" ready={ready} className="flex-1"
@@ -454,16 +477,14 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{p.pillar}</span>
               <span className="text-xs tabular-nums text-muted-foreground">{p.active}/{p.total}</span>
             </div>
-            <div className="mt-1 font-mono text-xl font-bold tabular-nums">{p.coverage}%</div>
+            {p.coverage === 0 && p.pillar === "AI identities"
+              ? <Link to="/vcro/signals/$id" params={{ id: "int-ai" }} className="mt-1 block text-sm font-semibold underline underline-offset-2">Connect</Link>
+              : <div className="mt-1 font-mono text-xl font-bold tabular-nums">{p.coverage}%</div>}
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={`h-full rounded-full ${p.coverage === 100 ? "bg-success" : p.coverage >= 70 ? "bg-foreground" : "bg-band-high"}`} style={{ width: `${p.coverage}%` }} />
             </div>
           </div>
         ))}
-        <div className="flex flex-col justify-between rounded-xl border border-dashed p-3 text-muted-foreground">
-          <span className="text-[10px] font-bold uppercase tracking-wider">AI identities</span>
-          <span className="mt-1 text-sm">Not connected</span>
-        </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="tabular-nums">{live.length} of {cov.sources.length} sources live · {fmt(cov.events30d)} events in 30 days</span>
@@ -474,7 +495,7 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
       </div>
       {off.length > 0 && !open && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-muted-foreground">Not connected</span>{off.map(chip)}
+          <span className="mr-1 text-xs text-muted-foreground">Ready to connect</span>{off.map(chip)}
         </div>
       )}
       {open && (
@@ -520,7 +541,7 @@ export function HeatmapCard({ ready, rows, className }: { ready: boolean; rows: 
     <Widget title="Risk heatmap" ready={ready} className={className}
       action={<span className="text-xs text-muted-foreground">Department × signal category, 0-100</span>}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-separate border-spacing-1 text-xs">
+        <table className="w-full min-w-[860px] border-separate border-spacing-1 text-xs">
           <thead>
             <tr>
               <th className="w-36" />

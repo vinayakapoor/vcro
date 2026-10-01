@@ -17,11 +17,12 @@ import { Route as VcroGettingStartedRouteImport } from './routes/vcro.getting-st
 import { Route as VcroReportsRouteImport } from './routes/vcro.reports'
 import { Route as VcroRiskometerRouteImport } from './routes/vcro.riskometer'
 import { Route as VcroSettingsRouteImport } from './routes/vcro.settings'
-import { Route as VcroSignalsRouteImport } from './routes/vcro.signals'
 import { Route as VcroWatchlistsRouteImport } from './routes/vcro.watchlists'
 import { Route as VcroWeightageRouteImport } from './routes/vcro.weightage'
 import { Route as VcroPeopleIndexRouteImport } from './routes/vcro.people.index'
 import { Route as VcroPeopleIdRouteImport } from './routes/vcro.people.$id'
+import { Route as VcroSignalsIndexRouteImport } from './routes/vcro.signals.index'
+import { Route as VcroSignalsIdRouteImport } from './routes/vcro.signals.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -63,11 +64,6 @@ const VcroSettingsRoute = VcroSettingsRouteImport.update({
   path: '/vcro/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VcroSignalsRoute = VcroSignalsRouteImport.update({
-  id: '/vcro/signals',
-  path: '/vcro/signals',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const VcroWatchlistsRoute = VcroWatchlistsRouteImport.update({
   id: '/vcro/watchlists',
   path: '/vcro/watchlists',
@@ -88,6 +84,16 @@ const VcroPeopleIdRoute = VcroPeopleIdRouteImport.update({
   path: '/vcro/people/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VcroSignalsIndexRoute = VcroSignalsIndexRouteImport.update({
+  id: '/vcro/signals/',
+  path: '/vcro/signals/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VcroSignalsIdRoute = VcroSignalsIdRouteImport.update({
+  id: '/vcro/signals/$id',
+  path: '/vcro/signals/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -98,11 +104,12 @@ export interface FileRoutesByFullPath {
   '/vcro/reports': typeof VcroReportsRoute
   '/vcro/riskometer': typeof VcroRiskometerRoute
   '/vcro/settings': typeof VcroSettingsRoute
-  '/vcro/signals': typeof VcroSignalsRoute
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people/': typeof VcroPeopleIndexRoute
+  '/vcro/signals/': typeof VcroSignalsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -113,11 +120,12 @@ export interface FileRoutesByTo {
   '/vcro/reports': typeof VcroReportsRoute
   '/vcro/riskometer': typeof VcroRiskometerRoute
   '/vcro/settings': typeof VcroSettingsRoute
-  '/vcro/signals': typeof VcroSignalsRoute
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people': typeof VcroPeopleIndexRoute
+  '/vcro/signals': typeof VcroSignalsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -129,11 +137,12 @@ export interface FileRoutesById {
   '/vcro/reports': typeof VcroReportsRoute
   '/vcro/riskometer': typeof VcroRiskometerRoute
   '/vcro/settings': typeof VcroSettingsRoute
-  '/vcro/signals': typeof VcroSignalsRoute
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people/': typeof VcroPeopleIndexRoute
+  '/vcro/signals/': typeof VcroSignalsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -146,11 +155,12 @@ export interface FileRouteTypes {
     | '/vcro/reports'
     | '/vcro/riskometer'
     | '/vcro/settings'
-    | '/vcro/signals'
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/signals/$id'
     | '/vcro/people/'
+    | '/vcro/signals/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,11 +171,12 @@ export interface FileRouteTypes {
     | '/vcro/reports'
     | '/vcro/riskometer'
     | '/vcro/settings'
-    | '/vcro/signals'
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/signals/$id'
     | '/vcro/people'
+    | '/vcro/signals'
   id:
     | '__root__'
     | '/'
@@ -176,11 +187,12 @@ export interface FileRouteTypes {
     | '/vcro/reports'
     | '/vcro/riskometer'
     | '/vcro/settings'
-    | '/vcro/signals'
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/signals/$id'
     | '/vcro/people/'
+    | '/vcro/signals/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -192,11 +204,12 @@ export interface RootRouteChildren {
   VcroReportsRoute: typeof VcroReportsRoute
   VcroRiskometerRoute: typeof VcroRiskometerRoute
   VcroSettingsRoute: typeof VcroSettingsRoute
-  VcroSignalsRoute: typeof VcroSignalsRoute
   VcroWatchlistsRoute: typeof VcroWatchlistsRoute
   VcroWeightageRoute: typeof VcroWeightageRoute
   VcroPeopleIdRoute: typeof VcroPeopleIdRoute
+  VcroSignalsIdRoute: typeof VcroSignalsIdRoute
   VcroPeopleIndexRoute: typeof VcroPeopleIndexRoute
+  VcroSignalsIndexRoute: typeof VcroSignalsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -257,13 +270,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VcroSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/vcro/signals': {
-      id: '/vcro/signals'
-      path: '/vcro/signals'
-      fullPath: '/vcro/signals'
-      preLoaderRoute: typeof VcroSignalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/vcro/watchlists': {
       id: '/vcro/watchlists'
       path: '/vcro/watchlists'
@@ -292,6 +298,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VcroPeopleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vcro/signals/': {
+      id: '/vcro/signals/'
+      path: '/vcro/signals'
+      fullPath: '/vcro/signals/'
+      preLoaderRoute: typeof VcroSignalsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vcro/signals/$id': {
+      id: '/vcro/signals/$id'
+      path: '/vcro/signals/$id'
+      fullPath: '/vcro/signals/$id'
+      preLoaderRoute: typeof VcroSignalsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -304,11 +324,12 @@ const rootRouteChildren: RootRouteChildren = {
   VcroReportsRoute: VcroReportsRoute,
   VcroRiskometerRoute: VcroRiskometerRoute,
   VcroSettingsRoute: VcroSettingsRoute,
-  VcroSignalsRoute: VcroSignalsRoute,
   VcroWatchlistsRoute: VcroWatchlistsRoute,
   VcroWeightageRoute: VcroWeightageRoute,
   VcroPeopleIdRoute: VcroPeopleIdRoute,
+  VcroSignalsIdRoute: VcroSignalsIdRoute,
   VcroPeopleIndexRoute: VcroPeopleIndexRoute,
+  VcroSignalsIndexRoute: VcroSignalsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

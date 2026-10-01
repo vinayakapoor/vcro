@@ -1,12 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Line, LineChart, YAxis } from "recharts";
-import { Pin, PinOff, UserRound } from "lucide-react";
+import { Pin, PinOff, Tag as TagIcon, UserRound } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DataTable, type Column, type Filter } from "@/features/shared/data-table";
 import { BandBadge, ChannelBadge, SoftBadge, TagBadge } from "@/features/shared/band";
 import { usePrefs } from "@/features/shared/prefs";
-import { CHANNELS, DEPARTMENTS, LOCATIONS, PREV_MONTH, formatAge, historyOf, initials, managerName, pseudonym, togglePinned, usePinned, useSignals, type ScoredPerson } from "@/lib/api";
+import { CHANNELS, DEPARTMENTS, LOCATIONS, PREV_MONTH, TAGS, customTagsByPerson, fmt, formatAge, historyOf, initials, managerName, pinMany, pseudonym, tagPeople, togglePinned, useCustomTags, usePinned, useSignals, type ScoredPerson } from "@/lib/api";
 import type { Band } from "@/lib/scoring";
 
 export type PeopleFilters = Record<string, string | undefined>;
@@ -25,6 +28,9 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
   const navigate = useNavigate();
   const signals = useSignals();
   const pinned = usePinned();
+  const customTags = useCustomTags();
+  const custom = customTagsByPerson(customTags);
+  const tagsOf = (p: ScoredPerson) => [...p.tags, ...(custom.get(p.id) ?? [])];
   const { privacy } = usePrefs();
   const nm = (p: ScoredPerson) => (privacy ? pseudonym(p.id) : p.name);
   const mgr = (p: ScoredPerson) => (privacy ? "Hidden" : managerName(p.managerId));
@@ -49,7 +55,7 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
     ) : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestSignal?.value ?? -1 },
     { id: "channel", header: "Weakest channel", cell: (p) => (p.weakestChannel ? <ChannelBadge channel={p.weakestChannel} /> : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestChannel ?? "" },
     { id: "lure", header: "Top lure", cell: (p) => (p.topLure ? <SoftBadge>{p.topLure}</SoftBadge> : <span className="text-muted-foreground">None</span>), sort: (p) => p.topLure ?? "" },
-    { id: "tags", header: "Tags", cell: (p) => <div className="flex flex-wrap gap-1">{p.tags.map((t) => <TagBadge key={t} tag={t} />)}</div> },
+    { id: "tags", header: "Tags", cell: (p) => { const t = tagsOf(p); return <div className="flex max-w-56 flex-wrap gap-1">{t.slice(0, 3).map((x) => <TagBadge key={x} tag={x} />)}{t.length > 3 && <span className="rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground" title={t.slice(3).join(", ")}>+{t.length - 3}</span>}</div>; } },
     { id: "confidence", header: "Confidence", cell: (p) => <span className={`tabular-nums ${p.lowConfidence ? "text-warning" : ""}`}>{p.confidence}%</span>, sort: (p) => p.confidence },
     { id: "last", header: "Last simulation", cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatAge(p.lastSimDays)}</span>, sort: (p) => -(p.lastSimDays ?? 9999) },
   ];
@@ -58,7 +64,7 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
     { id: "band", label: "Band", options: bandOrder, match: (p, v) => p.band === v },
     { id: "dept", label: "Department", options: [...DEPARTMENTS], match: (p, v) => p.department === v },
     { id: "location", label: "Location", options: [...LOCATIONS], match: (p, v) => p.location === v },
-    { id: "tag", label: "Tag", options: ["VIP", "Privileged", "Very attacked"], match: (p, v) => p.tags.includes(v as never) },
+    { id: "tag", label: "Tag", options: [...TAGS.map((t) => t.name as string), ...customTags.map((t) => t.name)], match: (p, v) => tagsOf(p).includes(v) },
     { id: "channel", label: "Weakest channel", options: [...CHANNELS], match: (p, v) => p.weakestChannel === v },
     { id: "level", label: "Level", options: ["Head", "Manager", "Individual"], match: (p, v) => p.level === v },
     { id: "team", label: "Team", options: [], match: (p, v) => p.managerId === v },
@@ -76,8 +82,21 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
       exportAs={{
         name: exportName,
         header: ["Person", "Email", "Department", "Role", "Manager", "Location", "Score", "Band", `Change since ${PREV_MONTH}`, "Weakest signal", "Weakest channel", "Top lure", "Tags", "Confidence %", "Last simulation"],
-        row: (p) => [nm(p), privacy ? "" : p.email, p.department, p.role, mgr(p), p.location, p.score, p.band, p.change, p.weakestSignal?.name, p.weakestChannel, p.topLure, p.tags.join("; "), p.confidence, formatAge(p.lastSimDays)],
+        row: (p) => [nm(p), privacy ? "" : p.email, p.department, p.role, mgr(p), p.location, p.score, p.band, p.change, p.weakestSignal?.name, p.weakestChannel, p.topLure, tagsOf(p).join("; "), p.confidence, formatAge(p.lastSimDays)],
       }}
+      bulk={(ids, clear) => (
+        <>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-7"><TagIcon className="size-3.5" />Add tag</Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{customTags.length ? "Your tags" : "No tags of your own yet"}</DropdownMenuLabel>
+              {customTags.map((t) => <DropdownMenuItem key={t.id} onSelect={() => { tagPeople(t.id, ids); toast.success(`${fmt(ids.length)} people tagged ${t.name}`); clear(); }}>{t.name}</DropdownMenuItem>)}
+              <DropdownMenuItem onSelect={() => navigate({ to: "/vcro/watchlists" })}>Manage tags</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" className="h-7" onClick={() => { pinMany(ids); toast.success(`${fmt(ids.length)} people pinned`); clear(); }}><Pin className="size-3.5" />Pin</Button>
+        </>
+      )}
       rowMenu={(p) => (
         <>
           <DropdownMenuItem onSelect={() => navigate({ to: "/vcro/people/$id", params: { id: p.id } })}><UserRound className="size-4" />View person</DropdownMenuItem>

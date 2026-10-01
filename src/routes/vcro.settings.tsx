@@ -109,6 +109,9 @@ function SettingsPage() {
         <div className="divide-y">
           <Row label="People entering High or Critical" hint="Flag on the Riskometer when anyone crosses into High or Critical in a month"><Switch checked={set.alerts.enterHigh} onCheckedChange={(v) => alertsSet({ enterHigh: v })} aria-label="People entering High or Critical" /></Row>
           <Row label="Organisation score rises by" hint="Flag when the score rises this much against last month. 0 turns it off."><Num label="Organisation score rise in points" v={set.alerts.orgRise} set={(n) => alertsSet({ orgRise: n ?? 0 })} suffix="pts" max={50} /></Row>
+          <Row label="Send alerts to" hint="Email addresses, separated by commas. Leave empty to alert every vCRO admin.">
+            <Input value={set.alerts.recipients} onChange={(e) => alertsSet({ recipients: e.target.value })} placeholder="soc@yourcompany.com" aria-label="Alert recipients" className="w-64" />
+          </Row>
           <Row label="Weekly risk digest" hint="Email summary of movers, watchlists and actions to vCRO admins" info="Delivery is handled by the platform's notification service; this switch records your preference."><Switch checked={set.alerts.weekly} onCheckedChange={(v) => alertsSet({ weekly: v })} aria-label="Weekly risk digest" /></Row>
         </div>
       </Widget>
@@ -139,13 +142,25 @@ function SettingsPage() {
       </Widget>
 
       <Widget title="Privacy" ready={ready}>
-        <Row label="Pseudonymise people" hint="Show employee numbers instead of names across vCRO and in exports" info="Useful when presenting or under works-council rules. Scores and actions stay the same.">
-          <Switch checked={set.privacy} onCheckedChange={(v) => setSet({ ...set, privacy: v })} aria-label="Pseudonymise people" />
-        </Row>
+        <div className="divide-y">
+          <Row label="Pseudonymise people" hint="Show employee numbers instead of names across vCRO and in exports" info="Useful when presenting or under works-council rules. Scores and actions stay the same.">
+            <Switch checked={set.privacy} onCheckedChange={(v) => setSet({ ...set, privacy: v })} aria-label="Pseudonymise people" />
+          </Row>
+          <Row label="Smallest team to show a score for" hint="Teams with fewer people show no team score in Departments" info="Stops anyone working out one person's score from a very small team. 0 shows every team.">
+            <Num label="Smallest team size" v={set.minGroupSize} set={(n) => setSet({ ...set, minGroupSize: n ?? 0 })} suffix="people" max={50} />
+          </Row>
+        </div>
+      </Widget>
+
+      <Widget title="People and groups" ready={ready}>
+        <div className="divide-y">
+          <Row label="Tags and watchlists" hint="Create your own tags, build rule-based watchlists and pin people"><Button asChild size="sm" variant="outline"><Link to="/vcro/watchlists">Open Watchlists</Link></Button></Row>
+          <Row label="Integrations" hint="Sources that feed the score and tools that act on it"><Button asChild size="sm" variant="outline"><Link to="/vcro/signals" search={{ tab: "integrations" }}>Open integrations</Link></Button></Row>
+        </div>
       </Widget>
 
       <Widget title="Reset" ready={ready}>
-        <Row label="Restore vCRO defaults" hint="Clears custom weights, signal switches, settings, your watchlists, pinned people, queued actions and generated reports">
+        <Row label="Restore vCRO defaults" hint="Clears custom weights, connections you added, settings, your tags and watchlists, queued actions and generated reports">
           <AlertDialog>
             <AlertDialogTrigger asChild><Button variant="outline" size="sm">Restore defaults</Button></AlertDialogTrigger>
             <AlertDialogContent>

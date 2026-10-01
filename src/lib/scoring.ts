@@ -11,13 +11,14 @@ export const CHANNELS: Channel[] = ["Email", "Voice", "SMS", "QR", "Deepfake"];
 export const LURES: Lure[] = ["Urgency", "Authority", "Reward", "Curiosity", "Fear", "Familiarity"];
 
 export const CATEGORY_WEIGHTS = {
-  Behaviour: { Simulations: 35, "Real-world incidents": 35, Learning: 18, Culture: 12, Attitude: 8 },
+  Behaviour: { Simulations: 35, "Real-world incidents": 35, Learning: 18, "Security hygiene": 15, Culture: 12, Attitude: 8 },
   Exposure: { Targeting: 35, "Human OSINT": 35, "Role visibility": 30 },
   Privilege: {
     "Access and admin": 35,
     "Financial authority": 25,
     "Data access": 25,
     "Seniority and network centrality": 15,
+    "AI agents": 15,
   },
 } as const;
 type ScoredPillar = keyof typeof CATEGORY_WEIGHTS;

@@ -23,7 +23,7 @@ export type Filter<T> = { id: string; label: string; options: string[]; match: (
 
 export function DataTable<T>({
   rows, columns, getId, filters = [], search, searchPlaceholder = "Search", onRowClick, rowMenu, toolbarExtra, initialFilters = {},
-  emptyText = "No results", emptyAction, defaultSort, pageSizeDefault = 25, exportAs, filterLabels,
+  emptyText = "No results", emptyAction, defaultSort, pageSizeDefault = 25, exportAs, filterLabels, bulk,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -42,6 +42,8 @@ export function DataTable<T>({
   exportAs?: TableExport<T>;
   /** Display text for filter values that are ids. */
   filterLabels?: Record<string, string>;
+  /** Actions for the ticked rows. Shown in a bar above the table while anything is ticked. */
+  bulk?: (ids: string[], clear: () => void) => ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [vals, setVals] = useState<Record<string, string | undefined>>(initialFilters);
@@ -142,6 +144,13 @@ export function DataTable<T>({
         </div>
       </div>
 
+      {bulk && sel.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium tabular-nums">{sel.size.toLocaleString("en-US")} selected</span>
+          {filtered.length > view.length && sel.size < filtered.length && <Button variant="ghost" size="sm" className="h-7" onClick={() => setSel(new Set(filtered.map(getId)))}>Select all {filtered.length.toLocaleString("en-US")}</Button>}
+          <span className="ml-auto flex flex-wrap items-center gap-2">{bulk([...sel], () => setSel(new Set()))}<Button variant="ghost" size="sm" className="h-7" onClick={() => setSel(new Set())}>Clear</Button></span>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
-import { ChevronDown, Pin, PinOff, Play, RotateCcw } from "lucide-react";
+import { ChevronDown, Pin, PinOff, Play, Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { usePrefs, useReady } from "@/features/shared/prefs";
 import { AXIS, ChartTip, ConfidenceLine } from "@/features/riskometer/widgets";
 import {
   ELEMENTS, LURES, PREV_MONTH, WORKFLOWS, clearRun, formatAge, formatStamp, getPerson, initials, managerName, nextSteps, pseudonym, queueRun, togglePinned,
-  usePinned, useRuns, useSignals,
+  tagPeople, untagPerson, useCustomTags, usePinned, useRuns, useSignals,
 } from "@/lib/api";
 import { PERSON_BY_ID, personDetail, type ActivityType } from "@/data/people";
 
@@ -53,6 +53,7 @@ function PersonPage() {
   const signals = useSignals();
   const runs = useRuns();
   const pinned = usePinned();
+  const customTags = useCustomTags();
   const { privacy } = usePrefs();
   const [type, setType] = useState<string>("All");
   const p = getPerson(signals, id);
@@ -92,7 +93,23 @@ function PersonPage() {
               {p.role} · <Link to="/vcro/people" search={{ dept: p.department }} className="underline-offset-2 hover:underline">{p.department}</Link> · {p.location}
               {p.managerId && <> · Reports to {privacy ? "hidden" : <Link to="/vcro/people/$id" params={{ id: p.managerId }} className="underline-offset-2 hover:underline">{managerName(p.managerId)}</Link>}</>}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1">{p.tags.map((t) => <TagBadge key={t} tag={t} />)}{p.level !== "Individual" && <SoftBadge>{p.level === "Head" ? "Department head" : "People manager"}</SoftBadge>}</div>
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {p.level !== "Individual" && <SoftBadge>{p.level === "Head" ? "Department head" : "People manager"}</SoftBadge>}
+              {p.tags.map((t) => <TagBadge key={t} tag={t} />)}
+              {customTags.filter((t) => t.members.includes(p.id)).map((t) => (
+                <span key={t.id} className="inline-flex items-center gap-1 rounded-md border bg-muted py-0.5 pl-1.5 pr-0.5 text-xs font-medium">{t.name}
+                  <button type="button" aria-label={`Remove tag ${t.name}`} className="grid size-4 place-items-center rounded hover:bg-foreground/10" onClick={() => untagPerson(t.id, p.id)}><X className="size-3" /></button>
+                </span>
+              ))}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Plus className="size-3" />Tag</button></DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>{customTags.length ? "Add one of your tags" : "No tags of your own yet"}</DropdownMenuLabel>
+                  {customTags.filter((t) => !t.members.includes(p.id)).map((t) => <DropdownMenuItem key={t.id} onSelect={() => tagPeople(t.id, [p.id])}>{t.name}</DropdownMenuItem>)}
+                  <DropdownMenuItem asChild><Link to="/vcro/watchlists">Manage tags</Link></DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

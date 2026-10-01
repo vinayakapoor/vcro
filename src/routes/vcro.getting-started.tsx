@@ -41,6 +41,7 @@ function GettingStarted() {
     { icon: Repeat, title: "Act and measure", body: "Run a recommended action, then watch the trend and department heatmap move.", done: queued > 0, meta: queued ? `${queued} queued` : "Nothing queued yet", need: "Done when you run a recommended action", to: "/vcro/riskometer" as const, cta: "See actions" },
   ];
   const doneCount = steps.filter((x) => x.done).length;
+  const nextIdx = steps.findIndex((x) => !x.done);
 
   const loop = [
     { icon: Zap, title: "JIT nudge", body: "Right after a risky action, a short lesson lands in the moment." },
@@ -51,7 +52,7 @@ function GettingStarted() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
-      <PageHeader title="Getting started" subtitle="Set up vCRO and turn the score into action" />
+      <PageHeader title="Getting started" subtitle={doneCount === steps.length ? "Setup complete. Everything below stays live." : "Six steps from first connection to first action"} />
 
       <Widget title="Setup guide" ready={ready}
         action={
@@ -62,11 +63,11 @@ function GettingStarted() {
         }>
         <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {steps.map((st, i) => (
-            <li key={st.title} className="flex flex-col rounded-xl border bg-card p-4">
+            <li key={st.title} className={`flex flex-col rounded-xl border bg-card p-4 ${i === nextIdx ? "ring-2 ring-foreground" : ""}`}>
               <div className="flex items-center gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted"><st.icon className="size-4" /></span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs text-muted-foreground">Step {i + 1}</div>
+                  <div className="text-xs text-muted-foreground">Step {i + 1}{i === nextIdx && <span className="ml-1.5 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-background">Next</span>}</div>
                   <div className="truncate text-sm font-semibold">{st.title}</div>
                 </div>
                 {st.done ? <CheckCircle2 className="size-5 shrink-0 text-success" aria-label="Done" /> : <Circle className="size-5 shrink-0 text-muted-foreground/50" aria-label="To do" />}
@@ -74,7 +75,7 @@ function GettingStarted() {
               <p className="mt-3 flex-1 text-sm text-muted-foreground">{st.body}</p>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
                 <span className="min-w-0 text-xs tabular-nums text-muted-foreground">{st.meta}{!st.done && <span className="block text-[11px] opacity-80">{st.need}</span>}</span>
-                <Button asChild variant="ghost" size="sm" className="h-7 px-2"><Link to={st.to}>{st.cta}<ArrowRight className="size-3.5" /></Link></Button>
+                <Button asChild variant={i === nextIdx ? "default" : "ghost"} size="sm" className="h-7 px-2"><Link to={st.to}>{st.cta}<ArrowRight className="size-3.5" /></Link></Button>
               </div>
             </li>
           ))}

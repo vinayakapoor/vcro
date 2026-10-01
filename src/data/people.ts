@@ -2,7 +2,19 @@ import { DEPARTMENTS, ELEMENTS, HEADCOUNT, LOCATIONS, TEMPLATES, type Department
 import type { Channel, Lure, Outcome, Readings, SimEvent } from "@/lib/scoring";
 import { CHANNELS, LURES } from "@/lib/scoring";
 
-export type Tag = "VIP" | "Privileged" | "Very attacked";
+export const TAGS = [
+  { name: "VIP", about: "Executives, board-facing leaders and department heads", source: "Recipients" },
+  { name: "Privileged", about: "Holds admin rights on systems or platforms", source: "Identity provider" },
+  { name: "Very attacked", about: "Receives far more targeted attacks than peers", source: "Email Security (ESA)" },
+  { name: "Externally exposed", about: "Credentials or personal data found in an external breach", source: "OSINT monitoring" },
+  { name: "Financial authority", about: "Can approve payments or change bank details", source: "Recipients" },
+  { name: "Sensitive data", about: "Works with confidential or regulated data every day", source: "Recipients" },
+  { name: "Joiner or mover", about: "Joined or changed role in the last 90 days", source: "HR system" },
+  { name: "Leaver", about: "In a notice period or being offboarded", source: "HR system" },
+  { name: "Contractor", about: "Contractor or vendor staff with system access", source: "HR system" },
+  { name: "Remote worker", about: "Works mostly outside the office network", source: "HR system" },
+] as const;
+export type Tag = (typeof TAGS)[number]["name"];
 export type Level = "Head" | "Manager" | "Individual";
 export type ActivityType = "Simulation" | "Real threat" | "Training" | "JIT nudge" | "Announcement";
 export type Activity = { id: string; type: ActivityType; title: string; detail: string; source: string; ageDays: number; sim?: SimEvent };
@@ -110,10 +122,10 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
   const vip = level === "Head" || department === "Executive Office" || r() < 0.01;
   const privileged = vip || (department === "IT" && r() < 0.5) || (department === "Finance" && r() < 0.35);
   const veryAttacked = (vip && r() < 0.55) || r() < 0.08;
-  const tags: Tag[] = [];
-  if (vip) tags.push("VIP");
-  if (privileged) tags.push("Privileged");
-  if (veryAttacked) tags.push("Very attacked");
+  const joiner = level === "Individual" && r() < 0.06;
+  const leaver = !vip && r() < 0.015;
+  const contractor = level === "Individual" && !vip && r() < 0.07;
+  const remote = r() < 0.3;
 
   const id = pid(i);
   const sims: SimEvent[] = [];
@@ -156,6 +168,21 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
     }
     readings[el.id] = el.category === "Real-world incidents" ? { value: clamp(v), ageDays: Math.floor(r() * 180) } : { value: clamp(v) };
   }
+  if (readings["exp-joiner"]) readings["exp-joiner"] = { value: joiner ? clamp(72 + r() * 25) : clamp(r() * 30) };
+  if (readings["exp-contractor"]) readings["exp-contractor"] = { value: contractor ? clamp(78 + r() * 20) : 0 };
+  if (readings["prv-outlive"] && !contractor) readings["prv-outlive"] = { value: 0 };
+  if (readings["prv-data"] && (department === "HR" || department === "Legal" || department === "Finance")) readings["prv-data"] = { value: clamp(readings["prv-data"].value + 30) };
+  const tags: Tag[] = [];
+  if (vip) tags.push("VIP");
+  if (privileged) tags.push("Privileged");
+  if (veryAttacked) tags.push("Very attacked");
+  if ((readings["exp-breach"]?.value ?? 0) > 60) tags.push("Externally exposed");
+  if ((readings["prv-fin"]?.value ?? 0) > 60) tags.push("Financial authority");
+  if ((readings["prv-data"]?.value ?? 0) > 60) tags.push("Sensitive data");
+  if (joiner) tags.push("Joiner or mover");
+  if (leaver) tags.push("Leaver");
+  if (contractor) tags.push("Contractor");
+  if (remote) tags.push("Remote worker");
   if (!noSims) {
     readings["sim-mfa"] = { value: clamp(propensity * 100 + (r() - 0.5) * 30) };
     readings["sim-callback"] = { value: clamp(propensity * 90 + (r() - 0.5) * 30) };

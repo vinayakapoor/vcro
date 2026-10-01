@@ -2,10 +2,10 @@
 // plain data, shaped the way a server would return it, so a real API can replace the bodies later.
 import { useSyncExternalStore } from "react";
 import {
-  DEPARTMENTS, ELEMENTS, HEADCOUNT, INTERVENTIONS, LOCATIONS, MONTHS, PLANNED_CONNECTORS, SIM_ELEMENT_CHANNEL, SOURCES, TEMPLATES,
+  DEPARTMENTS, ELEMENTS, HEADCOUNT, INTERVENTIONS, LOCATIONS, MONTHS, SIM_ELEMENT_CHANNEL, SOURCES, TEMPLATES,
   TODAY, WORKFLOWS, type Department,
 } from "@/data/catalogue";
-import { PEOPLE, PERSON_BY_ID, type Person, type Tag } from "@/data/people";
+import { PEOPLE, PERSON_BY_ID, TAGS, type Person, type Tag } from "@/data/people";
 import {
   bandFor, CHANNELS, computeScore, confidenceFor, DEFAULT_CONFIG, elementWeights, failed, isImpulsive, LURES, rates, scoreOnly,
   simulationRisk, skillScore, type Band, type Channel, type Lure, type Readings, type ScoreResult, type ScoringConfig, type SimEvent,
@@ -15,7 +15,7 @@ import {
 export type SignalState = { connected: Set<string>; disabled: Set<string>; active: Set<string>; weights: Record<string, number>; config: ScoringConfig };
 export type Currency = "USD" | "INR" | "AED";
 export type Settings = {
-  alerts: { enterHigh: boolean; orgRise: number; weekly: boolean };
+  alerts: { enterHigh: boolean; orgRise: number; weekly: boolean; recipients: string };
   automation: { autoRun: boolean; approvalAbove: number };
   /** In the tenant's chosen currency. Null until the tenant sets it. */
   costPerIncident: number | null;
@@ -23,13 +23,21 @@ export type Settings = {
   targetScore: number | null;
   currency: Currency;
   privacy: boolean;
+  /** Teams smaller than this show no score, so no one can be singled out through a small group. */
+  minGroupSize: number;
 };
-export type WatchlistRule = { department?: string; location?: string; tag?: string; minBand?: "Guarded" | "Elevated" | "High" | "Critical"; rising?: boolean; repeatClicker?: boolean };
+export type WatchlistRule = { department?: string; location?: string; tag?: string; tags?: string[]; minBand?: "Guarded" | "Elevated" | "High" | "Critical"; rising?: boolean; repeatClicker?: boolean };
 export type SavedWatchlist = { id: string; name: string; rule: WatchlistRule };
 export type Run = { id: string; key: string; workflow: string; target: string; people: number; status: "Queued" | "Dismissed"; at: string };
 export type ReportRun = { id: string; template: string; name: string; at: string; score: number; filename: string; mime: string; content: string };
 
-type Store = { signals: SignalState; settings: Settings; watchlists: SavedWatchlist[]; pinned: string[]; runs: Run[]; reports: ReportRun[]; visited: string[] };
+/** A tag an admin created. Members are added by hand, one at a time or in bulk. */
+export type CustomTag = { id: string; name: string; about: string; members: string[] };
+export type ConnectorConfig = { connectedAt: string; account: string; frequency: string; scope: string; lastSync: string; controls: Record<string, boolean> };
+type Store = {
+  signals: SignalState; settings: Settings; watchlists: SavedWatchlist[]; pinned: string[]; runs: Run[]; reports: ReportRun[]; visited: string[];
+  tags: CustomTag[]; connectors: Record<string, ConnectorConfig>;
+};
 
 function activeFor(connected: Set<string>, disabled: Set<string>) {
   return new Set(ELEMENTS.filter((e) => connected.has(e.sourceId) && !disabled.has(e.id)).map((e) => e.id));
@@ -38,18 +46,19 @@ function makeSignals(connected: Set<string>, disabled: Set<string>, weights: Rec
   return { connected, disabled, active: activeFor(connected, disabled), weights, config };
 }
 export const DEFAULT_SETTINGS: Settings = {
-  alerts: { enterHigh: true, orgRise: 5, weekly: true },
+  alerts: { enterHigh: true, orgRise: 5, weekly: true, recipients: "" },
   automation: { autoRun: true, approvalAbove: 250 },
-  costPerIncident: null, targetScore: null, currency: "USD", privacy: false,
+  costPerIncident: null, targetScore: null, currency: "USD", privacy: false, minGroupSize: 5,
 };
 const DEFAULT_STORE: Store = {
   signals: makeSignals(new Set(SOURCES.filter((s) => s.defaultConnected).map((s) => s.id)), new Set(), {}, DEFAULT_CONFIG),
-  settings: DEFAULT_SETTINGS, watchlists: [], pinned: [], runs: [], reports: [], visited: [],
+  settings: DEFAULT_SETTINGS, watchlists: [], pinned: [], runs: [], reports: [], visited: [], tags: [], connectors: {},
 };
 
 let store: Store = DEFAULT_STORE;
 const listeners = new Set<() => void>();
-const KEY = "hf.vcro.v1";
+// Bump the version when the source catalogue changes, so old saved connections do not hide new defaults.
+const KEY = "hf.vcro.v2";
 
 function persist() {
   if (typeof localStorage === "undefined") return;
@@ -82,7 +91,7 @@ export function hydrateStore() {
         new Set(sg.disabled ?? []), sg.weights ?? {}, { ...DEFAULT_CONFIG, ...sg.config },
       ),
       settings: { ...DEFAULT_SETTINGS, ...d.settings, alerts: { ...DEFAULT_SETTINGS.alerts, ...d.settings?.alerts }, automation: { ...DEFAULT_SETTINGS.automation, ...d.settings?.automation } },
-      watchlists: d.watchlists ?? [], pinned: d.pinned ?? [], runs: d.runs ?? [], reports: d.reports ?? [], visited: d.visited ?? [],
+      watchlists: d.watchlists ?? [], pinned: d.pinned ?? [], runs: d.runs ?? [], reports: d.reports ?? [], visited: d.visited ?? [], tags: d.tags ?? [], connectors: d.connectors ?? {},
     };
     listeners.forEach((l) => l());
   } catch { /* unreadable saved state: keep defaults */ }
@@ -98,6 +107,8 @@ export const usePinned = () => useSlice("pinned");
 export const useRuns = () => useSlice("runs");
 export const useReports = () => useSlice("reports");
 export const useVisited = () => useSlice("visited");
+export const useCustomTags = () => useSlice("tags");
+export const useConnectors = () => useSlice("connectors");
 /** Remember which vCRO pages this admin has opened, for the setup guide. */
 export const markVisited = (page: string) => { if (hydrated && !store.visited.includes(page)) update({ visited: [...store.visited, page] }); };
 
@@ -134,6 +145,30 @@ export function addWatchlist(name: string, rule: WatchlistRule) {
 export const removeWatchlist = (id: string) => update({ watchlists: store.watchlists.filter((w) => w.id !== id) });
 export const togglePinned = (id: string) => update({ pinned: store.pinned.includes(id) ? store.pinned.filter((x) => x !== id) : [...store.pinned, id] });
 export const clearPinned = () => update({ pinned: [] });
+export const pinMany = (ids: string[]) => update({ pinned: [...new Set([...store.pinned, ...ids])] });
+export function createTag(name: string, about: string) {
+  const t: CustomTag = { id: uid("tag"), name, about, members: [] };
+  update({ tags: [...store.tags, t] });
+  return t;
+}
+export const deleteTag = (id: string) => update({ tags: store.tags.filter((t) => t.id !== id) });
+export const tagPeople = (id: string, ids: string[]) => update({ tags: store.tags.map((t) => (t.id === id ? { ...t, members: [...new Set([...t.members, ...ids])] } : t)) });
+export const untagPerson = (id: string, personId: string) => update({ tags: store.tags.map((t) => (t.id === id ? { ...t, members: t.members.filter((m) => m !== personId) } : t)) });
+/** Connect a source: record how it was set up and switch its signals on. */
+export function connectSource(id: string, cfg: Omit<ConnectorConfig, "connectedAt" | "lastSync">, skip: string[] = []) {
+  const c = new Set(S().connected).add(id);
+  const d = new Set(S().disabled);
+  for (const e of ELEMENTS) if (e.sourceId === id) skip.includes(e.id) ? d.add(e.id) : d.delete(e.id);
+  update({ signals: makeSignals(c, d, S().weights, S().config), connectors: { ...store.connectors, [id]: { ...cfg, connectedAt: stamp(), lastSync: stamp() } } });
+}
+export function disconnectSource(id: string) {
+  const c = new Set(S().connected);
+  c.delete(id);
+  const { [id]: _, ...rest } = store.connectors;
+  update({ signals: makeSignals(c, S().disabled, S().weights, S().config), connectors: rest });
+}
+export const patchConnector = (id: string, p: Partial<ConnectorConfig>) => { const cur = store.connectors[id]; if (cur) update({ connectors: { ...store.connectors, [id]: { ...cur, ...p } } }); };
+export const toggleElement = (id: string, on: boolean) => update({ signals: previewElement(id, on) });
 /** Record a workflow request. Execution belongs to the Workflows module; vCRO keeps the request and its status. */
 export function queueRun(key: string, workflow: string, target: string, people: number) {
   update({ runs: [{ id: uid("run"), key, workflow, target, people, status: "Queued", at: stamp() }, ...store.runs.filter((r) => r.key !== key)] });
@@ -373,6 +408,8 @@ export function orgSummary(s: SignalState) {
       people, total: people.length, scored: sc.length, score, prev, change: score - prev, band: bandFor(score),
       confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), activeCount: s.active.size, totalElements: ELEMENTS.length,
       pillars: { Behaviour: Math.round(mean(sc.map((p) => p.behaviour))), Exposure: Math.round(mean(sc.map((p) => p.exposure))), Privilege: Math.round(mean(sc.map((p) => p.privilege))) },
+      bands: (["Low", "Guarded", "Elevated", "High", "Critical"] as const).map((b) => ({ band: b, count: sc.filter((p) => p.band === b).length })),
+      aiAgents: (() => { const v = sc.map((p) => p.categories["AI agents"]).filter((x): x is number => x != null); return v.length ? Math.round(mean(v)) : null; })(),
       highCount: high.length, highShare: people.length ? high.length / people.length : 0,
       enteredHigh: high.filter((p) => p.prev !== null && p.prev <= 60).length,
       leftHigh: sc.filter((p) => !isHigh(p.band) && p.prev !== null && p.prev > 60).length,
@@ -490,8 +527,8 @@ export function alerts(s: SignalState, set: Settings): Alert[] {
 
 // ---------- Signals ----------
 export function signalStats(s: SignalState) {
-  const sources = SOURCES.filter((x) => s.connected.has(x.id));
-  return { connectedSources: sources.length, totalSources: SOURCES.length, active: s.active.size, total: ELEMENTS.length, confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), lastSync: "1 Oct, 10:44" };
+  const feeding = SOURCES.filter((x) => x.direction !== "Action out");
+  return { connectedSources: feeding.filter((x) => s.connected.has(x.id)).length, totalSources: feeding.length, outbound: SOURCES.filter((x) => x.direction === "Action out" && s.connected.has(x.id)).length, active: s.active.size, total: ELEMENTS.length, confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), lastSync: "1 Oct, 10:44" };
 }
 export function signalCoverage(s: SignalState) {
   const pillars = (["Behaviour", "Exposure", "Privilege", "Reporting"] as const).map((pillar) => {
@@ -503,7 +540,10 @@ export function signalCoverage(s: SignalState) {
   const att = ELEMENTS.filter((e) => e.category === "Attitude");
   const attLive = att.filter((e) => s.active.has(e.id));
   pillars.splice(1, 0, { pillar: "Attitude", active: attLive.length, total: att.length, coverage: att.length ? Math.round((attLive.length / att.length) * 100) : 0 });
-  const sources = SOURCES.map((x) => ({ ...x, on: s.connected.has(x.id) }));
+  const ai = ELEMENTS.filter((e) => e.category === "AI agents");
+  const aiLive = ai.filter((e) => s.active.has(e.id));
+  pillars.push({ pillar: "AI identities", active: aiLive.length, total: ai.length, coverage: Math.round((aiLive.length / ai.length) * 100) });
+  const sources = SOURCES.filter((x) => x.direction !== "Action out").map((x) => ({ ...x, on: s.connected.has(x.id) }));
   return { pillars, sources, events30d: sources.filter((x) => x.on).reduce((a, x) => a + x.events30d, 0), missing: sources.filter((x) => !x.on && x.kind === "Integration") };
 }
 /** What connecting one more source would add: signals gained and confidence after. */
@@ -524,7 +564,7 @@ export function weakestSignals(s: SignalState) {
   });
 }
 
-export const HEAT_CATEGORIES = ["Simulations", "Real-world incidents", "Learning", "Culture", "Attitude", "Targeting", "Human OSINT", "Role visibility", "Access and admin", "Financial authority", "Data access"] as const;
+export const HEAT_CATEGORIES = ["Simulations", "Real-world incidents", "Learning", "Security hygiene", "Culture", "Attitude", "Targeting", "Human OSINT", "Role visibility", "Access and admin", "Financial authority", "Data access", "AI agents"] as const;
 export function deptHeatmap(s: SignalState) {
   return memo(s, "heat", () => {
     const people = getPeople(s).filter((p) => p.score !== null);
@@ -557,40 +597,60 @@ export function awarenessByDept(s: SignalState) {
   });
 }
 
-// ---------- Watchlists ----------
-export type WatchlistDef = { id: string; name: string; rule: string; custom?: boolean; match: (p: ScoredPerson) => boolean };
+// ---------- Tags, groups and watchlists ----------
+export type GroupKind = "who" | "behaviour" | "own";
+export type WatchlistDef = { id: string; name: string; rule: string; kind: GroupKind; custom?: boolean; match: (p: ScoredPerson) => boolean };
 const BAND_MIN: Record<string, number> = { Guarded: 21, Elevated: 41, High: 61, Critical: 81 };
+const ruleTags = (r: WatchlistRule) => [...(r.tags ?? []), ...(r.tag ? [r.tag] : [])];
 export function describeRule(r: WatchlistRule) {
-  const parts = [r.department && `Department ${r.department}`, r.location && `Location ${r.location}`, r.tag && `Tag ${r.tag}`, r.minBand && `${r.minBand} or above`, r.rising && "Score rising", r.repeatClicker && "2 or more fails in 180 days"].filter(Boolean);
-  return parts.length ? parts.join(" and ") : "Everyone scored";
+  const t = ruleTags(r);
+  const parts = [r.department && `Department ${r.department}`, r.location && `Location ${r.location}`, t.length && `Tagged ${t.join(" and ")}`, r.minBand && `${r.minBand} or above`, r.rising && "Score rising", r.repeatClicker && "2 or more fails in 180 days"].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Everyone scored";
 }
-const ruleMatch = (r: WatchlistRule) => (p: ScoredPerson) =>
-  p.score !== null && (!r.department || p.department === r.department) && (!r.location || p.location === r.location)
-  && (!r.tag || p.tags.includes(r.tag as Tag)) && (!r.minBand || p.score >= BAND_MIN[r.minBand]!)
-  && (!r.rising || (p.change ?? 0) > 0) && (!r.repeatClicker || p.fails180 >= 2);
-export const countRule = (s: SignalState, r: WatchlistRule) => getPeople(s).filter(ruleMatch(r)).length;
+/** Names of the admin-made tags each person carries. */
+export function customTagsByPerson(tags: CustomTag[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const t of tags) for (const m of t.members) { const l = out.get(m); l ? l.push(t.name) : out.set(m, [t.name]); }
+  return out;
+}
+const ruleMatch = (r: WatchlistRule, custom: Map<string, string[]>) => {
+  const want = ruleTags(r);
+  return (p: ScoredPerson) =>
+    (!r.department || p.department === r.department) && (!r.location || p.location === r.location)
+    && want.every((t) => (p.tags as string[]).includes(t) || custom.get(p.id)?.includes(t))
+    && (!r.minBand || (p.score !== null && p.score >= BAND_MIN[r.minBand]!))
+    && (!r.rising || (p.change ?? 0) > 0) && (!r.repeatClicker || p.fails180 >= 2);
+};
+export const countRule = (s: SignalState, r: WatchlistRule, tags: CustomTag[]) => getPeople(s).filter(ruleMatch(r, customTagsByPerson(tags))).length;
 
 function builtIn(s: SignalState): WatchlistDef[] {
   const sc = getPeople(s).filter((x) => x.score !== null).map((x) => x.score!).sort((a, b) => b - a);
   const cut = sc[Math.max(0, Math.round(sc.length * 0.1) - 1)] ?? 101;
+  const b = (id: string, name: string, rule: string, match: WatchlistDef["match"]): WatchlistDef => ({ id, name, rule, kind: "behaviour", match });
   return [
-    { id: "very-attacked-vips", name: "Very attacked VIPs", rule: "Tag VIP and Very attacked", match: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked") },
-    { id: "top-risk", name: "Top 10% by risk", rule: `Score ${cut} or above, the top 10% of scored people`, match: (p) => p.score !== null && p.score >= cut },
-    { id: "repeat-clickers", name: "Repeat clickers", rule: "2 or more failed simulations in 180 days", match: (p) => p.fails180 >= 2 },
-    { id: "credential-submitters", name: "Credential submitters", rule: "Entered data in a simulation in 120 days", match: (p) => p.sims.some((x) => x.outcome === "Data entered" && x.ageDays <= 120) },
-    { id: "privileged-high", name: "Privileged and High risk", rule: "Tag Privileged and band High or Critical", match: (p) => p.tags.includes("Privileged") && isHigh(p.band) },
-    { id: "impulsive", name: "Impulsive clickers", rule: `Clicked within ${s.config.impulsiveSeconds} seconds in 180 days`, match: (p) => p.impulsive },
-    { id: "overdue-training", name: "Overdue training", rule: "Overdue training signal above 60", match: (p) => (p.readings["lrn-overdue"]?.value ?? 0) > 60 },
-    { id: "new-high", name: "New this month", rule: `Entered High or Critical since ${PREV_MONTH}`, match: (p) => isHigh(p.band) && p.prev !== null && p.prev <= 60 },
+    { id: "very-attacked-vips", name: "Very attacked VIPs", rule: "Tagged VIP and Very attacked", kind: "who", match: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked") },
+    ...TAGS.map((t): WatchlistDef => ({ id: `tag:${t.name}`, name: t.name, rule: t.about, kind: "who", match: (p) => p.tags.includes(t.name) })),
+    b("top-risk", "Top 10% by risk", `Score ${cut} or above, the top 10% of scored people`, (p) => p.score !== null && p.score >= cut),
+    b("new-high", "New this month", `Entered High or Critical since ${PREV_MONTH}`, (p) => isHigh(p.band) && p.prev !== null && p.prev <= 60),
+    b("privileged-high", "Privileged and High risk", "Tagged Privileged and in High or Critical", (p) => p.tags.includes("Privileged") && isHigh(p.band)),
+    b("repeat-clickers", "Repeat clickers", "2 or more failed simulations in 180 days", (p) => p.fails180 >= 2),
+    b("credential-submitters", "Credential submitters", "Entered data in a simulation in 120 days", (p) => p.sims.some((x) => x.outcome === "Data entered" && x.ageDays <= 120)),
+    b("impulsive", "Impulsive clickers", `Clicked within ${s.config.impulsiveSeconds} seconds in 180 days`, (p) => p.impulsive),
+    b("overdue-training", "Overdue training", "Overdue training signal above 60", (p) => (p.readings["lrn-overdue"]?.value ?? 0) > 60),
+    b("never-reports", "Never reports", "Reported no simulation in the last 12 months", (p) => p.sims.length > 0 && !p.sims.some((x) => x.reported)),
+    ...(s.active.has("inc-genai") ? [b("shadow-ai", "Unsanctioned GenAI use", "Unsanctioned GenAI signal at 75 or above", (p) => (p.readings["inc-genai"]?.value ?? 0) >= 75)] : []),
+    ...(s.active.has("inc-signin") ? [b("risky-signin", "Risky sign-ins", "Risky sign-in signal at 75 or above", (p) => (p.readings["inc-signin"]?.value ?? 0) >= 75)] : []),
   ];
 }
-export function watchlistSummary(s: SignalState, saved: SavedWatchlist[], pinned: string[]) {
+export function watchlistSummary(s: SignalState, saved: SavedWatchlist[], pinned: string[], tags: CustomTag[]) {
   const people = getPeople(s);
   const pin = new Set(pinned);
+  const custom = customTagsByPerson(tags);
   const defs: WatchlistDef[] = [
     ...builtIn(s),
-    ...(pinned.length ? [{ id: "pinned", name: "Pinned by you", rule: "People you added by hand", custom: true, match: (p: ScoredPerson) => pin.has(p.id) }] : []),
-    ...saved.map((w) => ({ id: w.id, name: w.name, rule: describeRule(w.rule), custom: true, match: ruleMatch(w.rule) })),
+    ...(pinned.length ? [{ id: "pinned", name: "Pinned by you", rule: "People you added by hand", kind: "own" as const, custom: true, match: (p: ScoredPerson) => pin.has(p.id) }] : []),
+    ...tags.map((t) => { const m = new Set(t.members); return { id: t.id, name: t.name, rule: t.about || "Your tag. Members are added by hand.", kind: "own" as const, custom: true, match: (p: ScoredPerson) => m.has(p.id) }; }),
+    ...saved.map((w) => ({ id: w.id, name: w.name, rule: describeRule(w.rule), kind: "own" as const, custom: true, match: ruleMatch(w.rule, custom) })),
   ];
   return defs.map((w) => {
     const members = people.filter(w.match);
@@ -598,7 +658,7 @@ export function watchlistSummary(s: SignalState, saved: SavedWatchlist[], pinned
     const prevSc = members.filter((m) => m.prev !== null);
     const avg = sc.length ? Math.round(mean(sc.map((m) => m.score!))) : null;
     const prev = prevSc.length ? Math.round(mean(prevSc.map((m) => m.prev!))) : null;
-    return { ...w, members, avg, change: avg !== null && prev !== null ? avg - prev : null, band: bandFor(avg) };
+    return { ...w, members, avg, high: sc.filter((m) => isHigh(m.band)).length, change: avg !== null && prev !== null ? avg - prev : null, band: bandFor(avg) };
   });
 }
 
@@ -647,5 +707,6 @@ export const pseudonym = (id: string) => `Employee ${id.slice(1)}`;
 export const initials = (name: string) => name.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase();
 
 export const PREV_MONTH = MONTHS[10]!;
-export { ELEMENTS, SOURCES, MONTHS, DEPARTMENTS, LOCATIONS, CHANNELS, LURES, TEMPLATES, WORKFLOWS, PLANNED_CONNECTORS };
+export { ELEMENTS, SOURCES, MONTHS, DEPARTMENTS, LOCATIONS, CHANNELS, LURES, TEMPLATES, WORKFLOWS };
+export { TAGS };
 export type { Tag, Department, Band, Channel, Lure };

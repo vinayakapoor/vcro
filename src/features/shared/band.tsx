@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Crown, KeyRound, Link2, QrCode, Paperclip, FileInput, Mail, Phone, MessageSquare, Video } from "lucide-react";
+import { AlertTriangle, Banknote, Briefcase, Crown, DoorOpen, FileLock2, Globe, KeyRound, Laptop, Link2, QrCode, Paperclip, FileInput, Mail, Phone, MessageSquare, Tag as TagIcon, UserPlus, Video } from "lucide-react";
 import type { Band, Channel, Payload } from "@/lib/scoring";
 import type { Tag } from "@/data/people";
 import { cn } from "@/lib/utils";
@@ -58,8 +58,14 @@ const PAYLOAD_ICON: Record<Payload, ReactNode> = {
 };
 export const PayloadBadge = ({ payload }: { payload: Payload }) => <SoftBadge icon={PAYLOAD_ICON[payload]}>{payload}</SoftBadge>;
 
-const TAG_ICON: Record<Tag, ReactNode> = { VIP: <Crown className={ic} />, Privileged: <KeyRound className={ic} />, "Very attacked": <AlertTriangle className={ic} /> };
-export const TagBadge = ({ tag }: { tag: Tag }) => <SoftBadge icon={TAG_ICON[tag]}>{tag}</SoftBadge>;
+const TAG_ICON: Record<Tag, ReactNode> = {
+  VIP: <Crown className={ic} />, Privileged: <KeyRound className={ic} />, "Very attacked": <AlertTriangle className={ic} />,
+  "Externally exposed": <Globe className={ic} />, "Financial authority": <Banknote className={ic} />, "Sensitive data": <FileLock2 className={ic} />,
+  "Joiner or mover": <UserPlus className={ic} />, Leaver: <DoorOpen className={ic} />, Contractor: <Briefcase className={ic} />, "Remote worker": <Laptop className={ic} />,
+};
+/** Built-in tags get their own icon; tags an admin created get the generic one. */
+export const TagBadge = ({ tag }: { tag: string }) => <SoftBadge icon={TAG_ICON[tag as Tag] ?? <TagIcon className={ic} />}>{tag}</SoftBadge>;
+export const tagIcon = (tag: string) => TAG_ICON[tag as Tag] ?? <TagIcon className={ic} />;
 
 /** Delta vs previous month. Down is good (green), up is amber. */
 export function Change({ value, vs }: { value: number | null; vs?: string }) {

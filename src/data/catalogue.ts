@@ -1,14 +1,22 @@
 import type { Channel, ElementDef, Lure, Payload } from "@/lib/scoring";
 
-export type IntegrationCategory = "Identity" | "Endpoint" | "Data" | "Web" | "Email" | "HR" | "OSINT" | "AI identities";
+export type IntegrationCategory = "Identity" | "Endpoint" | "Data" | "Web" | "Email" | "HR" | "OSINT" | "AI identities" | "Collaboration" | "Browser" | "Security operations";
 /** Signal in: data that feeds the score. Action out: the score drives a control in another system. */
 export type Direction = "Signal in" | "Action out";
+/** One thing an outbound connector does with the score. `people` is who it applies to. */
+export type Control = { id: string; name: string; detail: string; people: "high" | "vipAttacked" | "all" | "actions" };
 
 export type Source = {
   id: string;
   name: string;
   kind: "Module" | "Integration";
   category?: IntegrationCategory;
+  direction?: Direction;
+  /** One line on what connecting this gives you. */
+  about?: string;
+  /** How the connector authenticates. */
+  auth?: "OAuth" | "API key" | "SCIM and API key" | "Webhook";
+  controls?: Control[];
   defaultConnected: boolean;
   lastSync: string;
   events30d: number;
@@ -29,14 +37,30 @@ export const SOURCES: Source[] = [
   { id: "feedback", name: "Feedback", kind: "Module", defaultConnected: true, lastSync: "30 Sep, 18:00", events30d: 890 },
   { id: "gamification", name: "Gamification", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 10:00", events30d: 3320 },
   { id: "recipients", name: "Recipients", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 5200 },
-  { id: "int-identity", name: "Identity provider", kind: "Integration", category: "Identity", defaultConnected: false, lastSync: "", events30d: 0 },
-  { id: "int-endpoint", name: "Endpoint protection", kind: "Integration", category: "Endpoint", defaultConnected: false, lastSync: "", events30d: 0 },
-  { id: "int-data", name: "Data loss prevention", kind: "Integration", category: "Data", defaultConnected: false, lastSync: "", events30d: 0 },
-  { id: "int-web", name: "Secure web gateway", kind: "Integration", category: "Web", defaultConnected: false, lastSync: "", events30d: 0 },
-  { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", defaultConnected: false, lastSync: "", events30d: 0 },
-  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
-  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
-  { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", defaultConnected: false, lastSync: "", events30d: 0 },
+  { id: "int-identity", name: "Identity provider", kind: "Integration", category: "Identity", direction: "Signal in", about: "Sign-in risk, admin roles and MFA strength for every account.", auth: "OAuth", defaultConnected: true, lastSync: "1 Oct, 10:40", events30d: 9400 },
+  { id: "int-pam", name: "Privileged access management", kind: "Integration", category: "Identity", direction: "Signal in", about: "Who holds standing privilege and how privileged sessions behave.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 620 },
+  { id: "int-password", name: "Password manager", kind: "Integration", category: "Identity", direction: "Signal in", about: "Weak and reused passwords, and who has adopted the vault.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 1480 },
+  { id: "int-endpoint", name: "Endpoint protection", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Malware and risky-action alerts tied to the person at the keyboard.", auth: "API key", defaultConnected: true, lastSync: "1 Oct, 10:42", events30d: 2150 },
+  { id: "int-mdm", name: "Device management", kind: "Integration", category: "Endpoint", direction: "Signal in", about: "Whether the devices each person uses are compliant and patched.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 5200 },
+  { id: "int-data", name: "Data loss prevention", kind: "Integration", category: "Data", direction: "Signal in", about: "Data-handling events and who can reach sensitive data.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 1730 },
+  { id: "int-web", name: "Secure web gateway", kind: "Integration", category: "Web", direction: "Signal in", about: "Blocked sites and unsanctioned GenAI use per person.", auth: "API key", defaultConnected: true, lastSync: "1 Oct, 10:44", events30d: 12800 },
+  { id: "int-browser", name: "Managed browser", kind: "Integration", category: "Browser", direction: "Signal in", about: "Risky extensions, data pasted into GenAI and password reuse, seen in the browser.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 7300 },
+  { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", direction: "Signal in", about: "Impersonation attempts aimed at each person and misdirected outbound email.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 16400 },
+  { id: "int-collab", name: "Collaboration and chat", kind: "Integration", category: "Collaboration", direction: "Signal in", about: "Phishing clicked and reported in chat, and risky external sharing.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 3900 },
+  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, joiners, movers and leavers.", auth: "SCIM and API key", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
+  { id: "int-third", name: "Contractor and third-party directory", kind: "Integration", category: "HR", direction: "Signal in", about: "Contractors and vendors with access, and access that outlives a contract.", auth: "SCIM and API key", defaultConnected: false, lastSync: "", events30d: 260 },
+  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "Breached credentials and what is public about each person.", auth: "API key", defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
+  { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", direction: "Signal in", about: "The AI agents each person owns, what those agents can reach and how they hold up to attack.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 880 },
+  { id: "out-access", name: "Conditional access", kind: "Integration", category: "Identity", direction: "Action out", about: "Tighten sign-in for the people the score says are riskiest.", auth: "OAuth", defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "stepup", name: "Step-up sign-in", detail: "Require stronger sign-in for High and Critical people", people: "high" }, { id: "session", name: "Shorter sessions", detail: "Limit session length for very attacked VIPs", people: "vipAttacked" }] },
+  { id: "out-mailpolicy", name: "Email policy", kind: "Integration", category: "Email", direction: "Action out", about: "Stricter mail filtering where the risk is.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "filter", name: "Stricter filtering", detail: "Apply the strict filtering policy to very attacked VIPs", people: "vipAttacked" }, { id: "banner", name: "External sender banner", detail: "Show a warning banner to High and Critical people", people: "high" }] },
+  { id: "out-siem", name: "SIEM and SOAR", kind: "Integration", category: "Security operations", direction: "Action out", about: "Put each person's score and band on the alerts your SOC already works.", auth: "Webhook", defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "enrich", name: "Alert enrichment", detail: "Add score, band and tags to every alert about a person", people: "all" }, { id: "events", name: "Score change events", detail: "Send an event when someone enters High or Critical", people: "high" }] },
+  { id: "out-itsm", name: "Ticketing", kind: "Integration", category: "Security operations", direction: "Action out", about: "A ticket for every approved action, closed with evidence.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "ticket", name: "Ticket per action", detail: "Open a ticket when a recommended action is approved", people: "actions" }, { id: "evidence", name: "Evidence on close", detail: "Attach the before and after score when the ticket closes", people: "actions" }] },
+  { id: "out-api", name: "Score API and BI export", kind: "Integration", category: "Data", direction: "Action out", about: "Scores for your own dashboards and warehouse.", auth: "API key", defaultConnected: false, lastSync: "", events30d: 0,
+    controls: [{ id: "api", name: "Score API", detail: "Scores by person, team and department on request", people: "all" }, { id: "export", name: "Scheduled export", detail: "Nightly export of every score to your warehouse", people: "all" }] },
 ];
 
 const e = (id: string, name: string, pillar: ElementDef["pillar"], category: string, sourceId: string): ElementDef => ({
@@ -88,26 +112,25 @@ export const ELEMENTS: ElementDef[] = [
   e("prv-data", "Sensitive data access", "Privilege", "Data access", "int-data"),
   e("prv-senior", "Seniority", "Privilege", "Seniority and network centrality", "recipients"),
   e("prv-network", "Network centrality", "Privilege", "Seniority and network centrality", "recipients"),
-];
-
-/**
- * Connector categories designed into the model but not yet shipped. They carry no weight and do not
- * affect confidence until they move into SOURCES and ELEMENTS.
- */
-export type PlannedConnector = { id: string; name: string; category: string; direction: Direction; adds: string[] };
-export const PLANNED_CONNECTORS: PlannedConnector[] = [
-  { id: "plan-collab", name: "Collaboration and chat", category: "Collaboration", direction: "Signal in", adds: ["Chat phishing clicked", "Chat phishing reported", "External guest sharing"] },
-  { id: "plan-browser", name: "Managed browser", category: "Browser", direction: "Signal in", adds: ["Risky extensions", "Sensitive data pasted into GenAI", "Password reuse on unknown sites"] },
-  { id: "plan-password", name: "Password manager", category: "Identity", direction: "Signal in", adds: ["Weak or reused passwords", "Vault adoption"] },
-  { id: "plan-pam", name: "Privileged access management", category: "Identity", direction: "Signal in", adds: ["Standing privilege", "Privileged session anomalies"] },
-  { id: "plan-mdm", name: "Device management", category: "Endpoint", direction: "Signal in", adds: ["Device compliance", "Unpatched personal devices"] },
-  { id: "plan-agents", name: "AI agent inventory", category: "AI identities", direction: "Signal in", adds: ["Agents owned per person", "Agent permissions", "Agent prompt-injection test results"] },
-  { id: "plan-third", name: "Contractor and third-party directory", category: "HR", direction: "Signal in", adds: ["Contractor flag", "Access outliving contract"] },
-  { id: "plan-access", name: "Conditional access", category: "Identity", direction: "Action out", adds: ["Step-up sign-in for High and Critical people", "Session limits for watchlists"] },
-  { id: "plan-mailpolicy", name: "Email policy", category: "Email", direction: "Action out", adds: ["Stricter filtering for very attacked people", "External sender banners by risk band"] },
-  { id: "plan-siem", name: "SIEM and SOAR", category: "Security operations", direction: "Action out", adds: ["Score and band on every alert", "Score change events"] },
-  { id: "plan-itsm", name: "Ticketing", category: "Security operations", direction: "Action out", adds: ["Ticket per approved action", "Evidence attached on close"] },
-  { id: "plan-api", name: "Score API and BI export", category: "Data", direction: "Action out", adds: ["Scores by person, team and department", "Scheduled warehouse export"] },
+  e("hyg-password", "Weak or reused passwords", "Behaviour", "Security hygiene", "int-password"),
+  e("hyg-vault", "Password vault not adopted", "Behaviour", "Security hygiene", "int-password"),
+  e("hyg-device", "Non-compliant device", "Behaviour", "Security hygiene", "int-mdm"),
+  e("hyg-patch", "Unpatched personal device", "Behaviour", "Security hygiene", "int-mdm"),
+  e("hyg-ext", "Risky browser extensions", "Behaviour", "Security hygiene", "int-browser"),
+  e("hyg-reuse", "Password reuse on unknown sites", "Behaviour", "Security hygiene", "int-browser"),
+  e("inc-paste", "Sensitive data pasted into GenAI", "Behaviour", "Real-world incidents", "int-browser"),
+  e("inc-chat", "Chat phishing clicked", "Behaviour", "Real-world incidents", "int-collab"),
+  e("inc-share", "Risky external sharing", "Behaviour", "Real-world incidents", "int-collab"),
+  e("inc-misdirect", "Misdirected email", "Behaviour", "Real-world incidents", "int-email"),
+  e("rep-chat", "Chat phishing reported", "Reporting", "Reporting", "int-collab"),
+  e("exp-imperson", "Impersonation attempts", "Exposure", "Targeting", "int-email"),
+  e("exp-contractor", "Contractor or third party", "Exposure", "Role visibility", "int-third"),
+  e("prv-standing", "Standing privilege", "Privilege", "Access and admin", "int-pam"),
+  e("prv-session", "Privileged session anomalies", "Privilege", "Access and admin", "int-pam"),
+  e("prv-outlive", "Access outliving contract", "Privilege", "Access and admin", "int-third"),
+  e("ai-owned", "AI agents owned", "Privilege", "AI agents", "int-ai"),
+  e("ai-perms", "Agent permissions", "Privilege", "AI agents", "int-ai"),
+  e("ai-inject", "Agent prompt-injection test results", "Privilege", "AI agents", "int-ai"),
 ];
 
 /** Which simulation channel feeds each simulation element. */
