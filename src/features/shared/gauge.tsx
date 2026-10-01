@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
-import { BAND_VAR, BandBadge, Change } from "./band";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { BAND_VAR, Change } from "./band";
 import { BAND_RANGES, bandFor } from "@/lib/scoring";
 
 const CX = 120, CY = 114, R = 92, W = 9;
@@ -27,7 +28,7 @@ const settle = (k: number) => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 
  * Riskometer: a needle gauge. The band the score sits in is lit; the needle sweeps to the score and
  * its tip pulses in the band colour. The thin outer arc is the likely range. Higher = riskier.
  */
-export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: number | null; prev: number | null; prevLabel: string; compact?: boolean; confidence?: number }) {
+export function Gauge({ value, prev, prevLabel, compact, confidence, hideRange }: { value: number | null; prev: number | null; prevLabel: string; compact?: boolean; confidence?: number; hideRange?: boolean }) {
   const gid = useId().replace(/:/g, "");
   const [shown, setShown] = useState(0);
   useEffect(() => {
@@ -50,6 +51,8 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
   const range = value !== null && confidence !== undefined ? rangeFor(value, confidence) : null;
   const tip = pt(shown, R - W / 2 - 12);
   const settled = value !== null && Math.abs(shown - value) < 0.5;
+  const at = BAND_RANGES.findIndex((b) => b.band === band);
+  const here = BAND_RANGES[at], below = BAND_RANGES[at - 1], above = BAND_RANGES[at + 1];
 
   return (
     <div className="flex flex-col items-center">
@@ -129,11 +132,30 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
         </span>
         {value !== null && <span className="text-sm text-muted-foreground">of 100</span>}
       </div>
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-        <BandBadge band={band} />
+      {/* The band, stated plainly, and how far the score is from the bands either side. */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+        <span className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold" style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)`, boxShadow: `inset 0 0 0 1.5px color-mix(in oklab, ${tone} 55%, transparent)` }}>
+          <span className="size-2 rounded-full" style={{ background: tone }} aria-hidden />{band}
+        </span>
         {value !== null && prev !== null && <span className="text-sm"><Change value={value - prev} vs={prevLabel} /></span>}
       </div>
-      {range && <div className="mt-2 text-xs text-muted-foreground tabular-nums">Likely range {range[0]} to {range[1]}</div>}
+      {value !== null && here && (
+        <div className={`mt-4 w-full ${compact ? "max-w-60" : "max-w-[22rem]"}`}>
+          <div className="grid grid-cols-5 gap-1">
+            {BAND_RANGES.map((b) => (
+              <div key={b.band} className="min-w-0">
+                <div className="h-1.5 rounded-full" style={{ background: BAND_VAR[b.band], opacity: b.band === band ? 1 : 0.25 }} />
+                <div className={`mt-1 truncate text-center text-[10px] ${b.band === band ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{b.band}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2.5 flex items-center justify-between gap-3 text-xs tabular-nums">
+            {below ? <span className="inline-flex items-center gap-1 text-success"><ArrowDown className="size-3.5" />{value - below.to} {value - below.to === 1 ? "pt" : "pts"} to {below.band}</span> : <span className="text-success">Lowest band</span>}
+            {above ? <span className="inline-flex items-center gap-1 text-warning">{above.from - value} {above.from - value === 1 ? "pt" : "pts"} to {above.band}<ArrowUp className="size-3.5" /></span> : <span className="text-warning">Highest band</span>}
+          </div>
+        </div>
+      )}
+      {range && !hideRange && <div className="mt-2 text-xs text-muted-foreground tabular-nums">Likely range {range[0]} to {range[1]}</div>}
     </div>
   );
 }
