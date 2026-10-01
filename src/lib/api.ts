@@ -699,6 +699,29 @@ export function signalCoverage(s: SignalState) {
   const sources = SOURCES.filter((x) => x.direction !== "Action out").map((x) => ({ ...x, on: s.connected.has(x.id) }));
   return { pillars, sources, events30d: sources.filter((x) => x.on).reduce((a, x) => a + x.events30d, 0), missing: sources.filter((x) => !x.on && x.kind === "Integration") };
 }
+/** Every category in the model: organisation average, points it adds, live signals and where they come from. */
+export function categoryOverview(s: SignalState, connectors: Record<string, ConnectorConfig>) {
+  const o = orgSummary(s), from = driverSources(s, connectors), people = getPeople(s).filter((p) => p.score !== null);
+  const order = ["Behaviour", "Exposure", "Privilege", "Reporting"];
+  const cats = [...new Set([...ELEMENTS].sort((a, b) => (a.category === "AI agents" ? 9 : order.indexOf(a.pillar)) - (b.category === "AI agents" ? 9 : order.indexOf(b.pillar))).map((e) => (e.pillar === "Reporting" ? "Reporting" : e.category)))];
+  return cats.map((category) => {
+    const els = ELEMENTS.filter((e) => (e.pillar === "Reporting" ? "Reporting" : e.category) === category);
+    const live = els.filter((e) => s.active.has(e.id));
+    const reporting = category === "Reporting";
+    let level: number | null = null;
+    if (live.length) {
+      if (reporting) { let sum = 0, n = 0; for (const p of people) for (const e of live) { const r = p.now[e.id]; if (r) { sum += r.value; n++; } } level = n ? Math.round(sum / n) : null; }
+      else { const v = people.map((p) => p.categories[category]).filter((x): x is number => x != null); level = v.length ? Math.round(mean(v)) : null; }
+    }
+    const missing = [...new Set(els.filter((e) => !s.connected.has(e.sourceId)).map((e) => e.sourceId))];
+    return {
+      category, pillar: category === "AI agents" ? "AI identities" : els[0]!.pillar, reporting, level, live: live.length, total: els.length,
+      points: o.makeup.find((d) => d.category === (reporting ? "Reporting offset" : category))?.points ?? null,
+      sources: from[reporting ? "Reporting offset" : category] ?? [],
+      connect: missing[0] ? { id: missing[0], name: SOURCES.find((x) => x.id === missing[0])!.name, more: missing.length - 1 } : null,
+    };
+  });
+}
 /** For each driver of the score: the connected sources its signals come from, by product name. */
 export function driverSources(s: SignalState, connectors: Record<string, ConnectorConfig>): Record<string, string[]> {
   const out: Record<string, string[]> = {};
