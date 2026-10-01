@@ -276,7 +276,6 @@ export function MatrixCard({ s, ready }: { s: Summary; ready: boolean }) {
           </div>
         )}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">{mode === "dept" ? "Bubble size is headcount. Click a bubble to see its people." : "The 50 highest scores. Click a dot to open the person."}</p>
     </Widget>
   );
 }
@@ -392,8 +391,7 @@ export function TreemapCard({ s, ready }: { s: Summary; ready: boolean }) {
         })}
       </svg>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>Colour is the band; darker means a higher score, from {lo} to {hi}.</span>
-        <span className="ml-auto">Area is headcount. Click a block to see its people.</span>
+        <span>Area is headcount. Darker is a higher score.</span>
       </div>
     </Widget>
   );
@@ -403,7 +401,7 @@ export function ConcentrationCard({ s, ready }: { s: Summary; ready: boolean }) 
   return (
     <Widget title="Risk concentration" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col">
       <p className="text-sm"><span className="font-semibold">The riskiest {s.concentration.people}% of people carry {s.concentration.risk}% of the risk</span></p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{fmt(s.concentration.count)} people. Risk here is score above the Low band.</p>
+      <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{fmt(s.concentration.count)} people</p>
       <div className="mt-2 min-h-52 flex-1">
         <ResponsiveContainer>
           <LineChart data={s.pareto} margin={{ top: 8, right: 12, left: 4, bottom: 16 }}>
@@ -479,19 +477,23 @@ export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType
   const next = ready ? bestNextSources(sig) : [];
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
-      action={<Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>}>
+      action={
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success"><span className="size-1.5 rounded-full bg-success" aria-hidden />{st.active} signals connected</span>
+          <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>
+        </div>
+      }>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {cov.pillars.map((p) => (
-          <div key={p.pillar} className="rounded-xl border p-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{p.pillar}
-                <InfoTip label={p.pillar} text={`${TILE_INFO[p.pillar]} ${p.from.length ? `Live from ${p.from.join(", ")}.` : "No source connected yet."} The percentage is how much of this part of the model has live data, not a risk score.`} /></span>
-            </div>
-            {p.active === 0
-              ? <Link to="/vcro/signals" search={{ tab: "integrations" }} className="mt-3 block text-sm font-semibold underline underline-offset-2">Connect a source</Link>
-              : <div className="mt-3 text-2xl font-bold tabular-nums tracking-tight">{p.coverage}%</div>}
+          <div key={p.pillar} className="flex flex-col rounded-xl border p-4">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{p.pillar}
+              <InfoTip label={p.pillar} text={`${TILE_INFO[p.pillar]} ${p.from.length ? `Live from ${p.from.join(", ")}.` : "No source connected yet."} The percentage is how much of this part of the model has live data, not a risk score.`} /></span>
+            <div className={`mt-3 text-2xl font-bold tabular-nums tracking-tight ${p.active === 0 ? "text-muted-foreground" : ""}`}>{p.coverage}%</div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground" style={{ width: `${p.coverage}%` }} /></div>
-            <div className="mt-2 text-xs tabular-nums text-muted-foreground">{p.active} of {p.total} signals live</div>
+            <div className="mt-2 flex items-center justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+              <span>{p.active} of {p.total} signals</span>
+              {p.active < p.total && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium text-foreground underline underline-offset-2">Connect</Link>}
+            </div>
           </div>
         ))}
       </div>
@@ -650,7 +652,6 @@ export function RiskSpreadingCard({ ready, spreaders, managers, className }: { r
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-muted-foreground">Involvement is how well a department's managers do on their own training and policy signals, 0 to 100.</p>
         </div>
       </div>
     </Widget>

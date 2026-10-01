@@ -208,7 +208,6 @@ function Team({ manager, team, people, minGroup, privacy, ready }: { manager: Sc
             ))}
           </ul>
         )}
-        <p className="mt-3 text-xs text-muted-foreground">{fmt(people.length)} people are scored the same way across the organisation. Managers see bands, not the detail behind them.</p>
       </Widget>
     </div>
   );

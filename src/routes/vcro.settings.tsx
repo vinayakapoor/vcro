@@ -140,7 +140,6 @@ function SettingsPage() {
             </Row>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">To see what a manager or an employee sees, open any person and choose Scorecard.</p>
       </Widget>
 
       <Widget title="People and groups" ready={ready}>

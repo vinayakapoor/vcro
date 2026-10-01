@@ -317,7 +317,7 @@ function Connected({ src }: { src: Source }) {
 
       <div className="grid gap-4 lg:grid-cols-12">
         {out ? (
-          <Widget title="Controls" ready={ready} className="lg:col-span-7">
+          <Widget title="Controls" ready={ready} className="lg:col-span-7" info="Who a control applies to follows the score. When someone leaves High or Critical, the control lifts on the next delivery.">
             <div className="divide-y">
               {src.controls!.map((c) => {
                 const live = cfg?.controls[c.id] ?? true;
@@ -330,7 +330,6 @@ function Connected({ src }: { src: Source }) {
                 );
               })}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Who a control applies to follows the score. When someone leaves High or Critical, the control lifts on the next delivery.</p>
           </Widget>
         ) : (
           <Widget title="Signals from this source" ready={ready} className="lg:col-span-7">

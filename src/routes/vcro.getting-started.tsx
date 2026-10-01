@@ -110,7 +110,7 @@ function GettingStarted() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Widget title="How the score works" ready={ready}>
           <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">Likelihood comes from what people do and how exposed they are. Reporting real and simulated threats takes up to 15 points off Behaviour. Privilege then scales the result: more access, more impact. The organisation score is the average across everyone scored.</p>
+            <p className="text-muted-foreground">What people do, plus how exposed they are, less a credit for reporting, scaled by what they can reach.</p>
             <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-3 font-medium">
               <span>(</span><span className="rounded-md bg-card px-2 py-1 shadow-sm">Behaviour less reporting × 0.65</span><span>+</span>
               <span className="rounded-md bg-card px-2 py-1 shadow-sm">Exposure × 0.35</span><span>)</span><span>×</span>
@@ -122,7 +122,6 @@ function GettingStarted() {
                 {BAND_RANGES.map(({ band, from, to }) => <span key={band}><span className="block font-medium">{band}</span><span className="tabular-nums text-muted-foreground">{from} to {to}</span></span>)}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Only connected sources count. A signal with no connection is left out of the score and out of every page, and confidence shows how much of the model has live data.</p>
           </div>
         </Widget>
 

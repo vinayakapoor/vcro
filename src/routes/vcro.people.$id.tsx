@@ -268,7 +268,6 @@ function PersonPage() {
               </div>
             ))}
           </div>
-          {next.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Expected drop is modelled: the score if the signals this step addresses reached the level of the best-performing quarter of the organisation.</p>}
         </Widget>
 
         <Widget title="Channel results" ready={ready} className="lg:col-span-7" empty={!hasSims && { text: "No simulations have reached this person yet.", action: null }}>
@@ -290,7 +289,6 @@ function PersonPage() {
               </TableBody>
             </Table>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Simulated attacks over the last 12 months. A click under {signals.config.impulsiveSeconds} seconds counts as impulsive.</p>
         </Widget>
         <Widget title="Lure profile" ready={ready} className="lg:col-span-5" empty={!hasSims && { text: "Needs simulation results.", action: null }}>
           <div className="h-60">
