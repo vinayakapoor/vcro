@@ -7,18 +7,18 @@ import { TAGS } from "@/lib/api";
  * A person's tags, rolled up: the first few as badges, the rest behind a "+N" that opens the full list
  * with what each tag means and which source applied it.
  */
-export function TagList({ tags, custom = [], max = 2 }: { tags: readonly string[]; custom?: readonly string[]; max?: number }) {
+export function TagList({ tags, custom = [], max = 1, wrap = false }: { tags: readonly string[]; custom?: readonly string[]; max?: number; wrap?: boolean }) {
   const all = [...tags, ...custom];
   if (!all.length) return <span className="text-xs text-muted-foreground">No tags</span>;
   const rest = all.length - max;
   return (
     <Popover>
-      <div className="flex flex-wrap items-center gap-1">
+      <div className={`flex items-center gap-1 ${wrap ? "flex-wrap" : "flex-nowrap"}`}>
         {all.slice(0, max).map((t) => <TagBadge key={t} tag={t} />)}
         <PopoverTrigger asChild>
           <button type="button" onClick={(e) => e.stopPropagation()} aria-label={all.length === 1 ? "About this tag" : `Show all ${all.length} tags`}
-            className="rounded-md border px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            {rest > 0 ? `+${rest}` : "About"}
+            className="whitespace-nowrap rounded-md border px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {rest > 0 ? `+${rest} more` : "About"}
           </button>
         </PopoverTrigger>
       </div>

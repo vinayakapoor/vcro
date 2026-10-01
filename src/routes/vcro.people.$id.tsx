@@ -125,7 +125,7 @@ function PersonPage() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1">
               {p.level !== "Individual" && <SoftBadge>{p.level === "Head" ? "Department head" : "People manager"}</SoftBadge>}
-              <TagList tags={p.tags} custom={custom.map((t) => t.name)} max={4} />
+              <TagList tags={p.tags} custom={custom.map((t) => t.name)} max={4} wrap />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Plus className="size-3" />Tag</button></DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
