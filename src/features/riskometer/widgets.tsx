@@ -15,7 +15,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Widget } from "@/features/shared/widget";
 import { InfoTip } from "@/features/shared/info";
-import { Gauge, rangeFor } from "@/features/shared/gauge";
+import { Gauge } from "@/features/shared/gauge";
 import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/band";
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
@@ -74,22 +74,13 @@ export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "E
 
 /** Hero, left: the score itself. */
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
-  const range = rangeFor(s.score, s.confidence);
   return (
     <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <div className="flex flex-1 items-center justify-center px-2 py-2 sm:py-4"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} hideRange /></div>
-      <div className="grid grid-cols-3 divide-x border-t pt-4 text-center">
-        <div className="px-2">
-          <div className="text-[11px] text-muted-foreground">Likely range</div>
-          <div className="mt-0.5 text-sm font-semibold tabular-nums">{range[0]} to {range[1]}</div>
-        </div>
-        <div className="px-2">
-          <div className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">Confidence<InfoTip label="Confidence" /></div>
-          <div className="mt-0.5 text-sm font-semibold tabular-nums">{s.confidence}%</div>
-        </div>
-        <Link to="/vcro/reports" search={{ tab: "overview" }} className="rounded-md px-2 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <div className="text-[11px] text-muted-foreground">Peer median {BENCHMARK.median.score}</div>
-          <div className={`mt-0.5 text-sm font-semibold tabular-nums ${s.score <= BENCHMARK.median.score ? "text-success" : "text-warning"}`}>{s.score === BENCHMARK.median.score ? "Level" : `${Math.abs(BENCHMARK.median.score - s.score)} pts ${s.score < BENCHMARK.median.score ? "better" : "worse"}`}</div>
+      <div className="flex flex-1 items-center justify-center px-2 py-2 sm:py-8"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t pt-4">
+        <ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} />
+        <Link to="/vcro/reports" search={{ tab: "overview" }} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          Peer median {BENCHMARK.median.score} · <span className={s.score <= BENCHMARK.median.score ? "font-medium text-success" : "font-medium text-warning"}>{s.score === BENCHMARK.median.score ? "level" : `${Math.abs(BENCHMARK.median.score - s.score)} pts ${s.score < BENCHMARK.median.score ? "better" : "worse"}`}</span>
         </Link>
       </div>
     </Widget>
