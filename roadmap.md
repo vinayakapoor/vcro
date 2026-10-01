@@ -1,0 +1,11 @@
+# Roadmap
+- [x] Ranked next actions (auto vs approval)
+- [x] Attitude check-in signal group
+- [x] Risk spreading (peer exposure, manager involvement)
+- [x] Personal skill score on person page
+- [x] Fix empty gaps: Riskometer card bottom, Signals card bottom
+- [x] Build Weightage, Reports, vCRO Settings pages
+- [x] Info (i) explainers on every metric
+- [x] Watchlists: create your own watchlist
+- [x] Skill levels on person page
+- [x] vCRO-only Settings, Reports charts + filters, editable Weightage, Department filters, full spec .md
