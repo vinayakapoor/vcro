@@ -52,17 +52,18 @@ export function Gauge({ value, prev, prevLabel, compact, confidence, hideRange }
   const settled = value !== null && Math.abs(shown - value) < 0.5;
 
   return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="-8 0 256 134" className={compact ? "w-60" : "w-full max-w-[20rem]"} role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
+    <div className="flex w-full flex-col items-center">
+      <svg viewBox="-8 0 256 134" className={compact ? "w-60" : "w-full max-w-[18.5rem]"} role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
         <defs>
           <radialGradient id={`glow${gid}`} cx="50%" cy="100%" r="75%">
-            <stop offset="0" stopColor={tone} stopOpacity={value === null ? 0 : 0.2} />
+            <stop offset="0" stopColor={tone} stopOpacity={value === null ? 0 : 0.32} />
             <stop offset="1" stopColor={tone} stopOpacity="0" />
           </radialGradient>
           <linearGradient id={`needle${gid}`} x1="0" x2="1" y1="0" y2="0">
             <stop offset="0" stopColor={tone} />
             <stop offset="0.45" stopColor="var(--foreground)" />
           </linearGradient>
+          <filter id={`blur${gid}`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" /></filter>
         </defs>
 
         {/* Soft wash of the band colour behind the dial. */}
@@ -73,16 +74,23 @@ export function Gauge({ value, prev, prevLabel, compact, confidence, hideRange }
           const major = v % 20 === 0;
           const [x1, y1] = pt(v, R - W / 2 - 4);
           const [x2, y2] = pt(v, R - W / 2 - (major ? 9 : 6.5));
-          return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} className={major ? "stroke-muted-foreground/70" : "stroke-muted-foreground/30"} strokeWidth={major ? 1.1 : 0.7} strokeLinecap="round" />;
+          return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} {...(value !== null && v <= shown ? { stroke: BAND_VAR[bandFor(Math.max(1, v))], strokeOpacity: 0.9 } : { className: major ? "stroke-muted-foreground/70" : "stroke-muted-foreground/30" })} strokeWidth={major ? 1.2 : 0.8} strokeLinecap="round" />;
         })}
 
         {/* Bands: the one the score sits in is lit, the rest step back. */}
         {SEGMENTS.map((sg, i) => {
           const active = sg.band === band;
           return (
-            <path key={sg.band} d={arc(sg.from + (i === 0 ? 0 : GAP), sg.to - (i === SEGMENTS.length - 1 ? 0 : GAP))} fill="none" stroke={BAND_VAR[sg.band]}
-              strokeWidth={active ? W + 2.5 : W} strokeOpacity={value === null ? 0.2 : active ? 1 : 0.32}
+            <g key={sg.band}>
+            {active && value !== null && (
+              <path d={arc(sg.from + GAP, sg.to - GAP)} fill="none" stroke={BAND_VAR[sg.band]} strokeWidth={W + 8} filter={`url(#blur${gid})`} opacity={0.35}>
+                <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3.2s" repeatCount="indefinite" />
+              </path>
+            )}
+            <path d={arc(sg.from + (i === 0 ? 0 : GAP), sg.to - (i === SEGMENTS.length - 1 ? 0 : GAP))} fill="none" stroke={BAND_VAR[sg.band]}
+              strokeWidth={active ? W + 2.5 : W} strokeOpacity={value === null ? 0.2 : active ? 1 : 0.55}
               strokeLinecap={i === 0 || i === SEGMENTS.length - 1 ? "round" : "butt"} style={{ transition: "stroke-opacity .4s, stroke-width .4s" }} />
+            </g>
           );
         })}
 
@@ -123,20 +131,18 @@ export function Gauge({ value, prev, prevLabel, compact, confidence, hideRange }
         )}
       </svg>
 
-      {/* The score and its band side by side, so the band reads as the verdict. */}
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-        <div className="flex items-baseline gap-1.5">
-          <span className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-[3.25rem] font-bold leading-none tracking-tighter tabular-nums"}>
-            {value === null ? <span className="text-2xl tracking-tight text-muted-foreground">No score yet</span> : Math.round(Math.min(100, shown))}
-          </span>
-          {value !== null && <span className="text-xs text-muted-foreground">of 100</span>}
-        </div>
-        <div className="flex flex-col items-start gap-1">
-          <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold" style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)`, boxShadow: `inset 0 0 0 1.5px color-mix(in oklab, ${tone} 55%, transparent)` }}>
-            <span className="size-2 rounded-full" style={{ background: tone }} aria-hidden />{band}
-          </span>
-          {value !== null && prev !== null && <span className="pl-1 text-xs"><Change value={value - prev} vs={prevLabel} /></span>}
-        </div>
+      {/* The score, then one line under it: the band and the change since last month. */}
+      <div className="mt-2 flex items-baseline justify-center gap-1.5">
+        <span className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-[3.25rem] font-bold leading-none tracking-tighter tabular-nums"}>
+          {value === null ? <span className="text-2xl tracking-tight text-muted-foreground">No score yet</span> : Math.round(Math.min(100, shown))}
+        </span>
+        {value !== null && <span className="text-sm text-muted-foreground">/ 100</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1.5 text-sm leading-none">
+        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-semibold" style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${tone} 50%, transparent)` }}>
+          <span className="size-1.5 rounded-full" style={{ background: tone }} aria-hidden />{band}
+        </span>
+        {value !== null && prev !== null && value !== prev && <><span className="h-3.5 w-px bg-border" aria-hidden /><Change value={value - prev} vs={prevLabel} /></>}
       </div>
       {range && !hideRange && <div className="mt-2 text-xs text-muted-foreground tabular-nums">Likely range {range[0]} to {range[1]}</div>}
     </div>

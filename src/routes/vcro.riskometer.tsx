@@ -43,7 +43,7 @@ function RiskometerPage() {
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader
         title="Organisation Risk Score - vCRO"
-        subtitle="A detailed report showcasing the Risk Score of the organisation and how different departments and users are influencing it."
+        subtitle="A detailed report showcasing the Risk Score of the organisation and how different factors are influencing it."
         action={<Button onClick={exportPack}><Download className="size-4" />Export board pack</Button>}
       />
 
