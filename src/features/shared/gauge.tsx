@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { BAND_VAR, BandBadge, Change } from "./band";
 import { BAND_RANGES, bandFor } from "@/lib/scoring";
 
-const CX = 120, CY = 116, R = 92, W = 13;
-const GAP = 0.9;
+const CX = 120, CY = 114, R = 92, W = 9;
+const GAP = 1.1;
 
 function pt(v: number, r: number) {
   const a = Math.PI - (v / 100) * Math.PI;
@@ -20,22 +20,25 @@ export const rangeFor = (value: number, confidence: number) => {
 };
 /** The dial splits at 20, 40, 60 and 80, the same cut-offs as the bands. */
 const SEGMENTS = BAND_RANGES.map((b) => ({ band: b.band, from: b.from === 0 ? 0 : b.from - 1, to: b.to }));
+/** Settles slightly past the value and eases back, like a real needle. */
+const settle = (k: number) => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
 
 /**
- * Riskometer dial. Five band segments, filled up to the score. A pointer marks the score, a tick marks
- * last month, and the thin inner arc is the likely range given how much data is connected. Higher = riskier.
+ * Riskometer: a needle gauge. The band the score sits in is lit; the needle sweeps to the score and
+ * its tip pulses in the band colour. The thin outer arc is the likely range. Higher = riskier.
  */
 export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: number | null; prev: number | null; prevLabel: string; compact?: boolean; confidence?: number }) {
+  const gid = useId().replace(/:/g, "");
   const [shown, setShown] = useState(0);
   useEffect(() => {
     if (value === null) return;
-    // A background tab does not run animation frames: show the final position straight away.
-    if (document.hidden) { setShown(value); return; }
+    // No sweep in a background tab or when the person has asked for reduced motion.
+    if (document.hidden || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setShown(value); return; }
     let raf = 0;
     const start = performance.now();
     const tick = (t: number) => {
-      const k = Math.min(1, (t - start) / 800);
-      setShown(value * (1 - Math.pow(1 - k, 3)));
+      const k = Math.min(1, (t - start) / 1300);
+      setShown(Math.max(0, value * settle(k)));
       if (k < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -43,47 +46,90 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
   }, [value]);
 
   const band = bandFor(value);
+  const tone = BAND_VAR[band];
   const range = value !== null && confidence !== undefined ? rangeFor(value, confidence) : null;
-  const [mx, my] = pt(shown, R);
+  const tip = pt(shown, R - W / 2 - 12);
+  const settled = value !== null && Math.abs(shown - value) < 0.5;
 
   return (
     <div className="flex flex-col items-center">
-      <div className={compact ? "relative w-60" : "relative w-full max-w-[24rem]"}>
-        <svg viewBox="-10 -14 260 150" className="w-full overflow-visible" role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
-          {SEGMENTS.map((sg, i) => {
-            const a = sg.from + (i === 0 ? 0 : GAP), b = sg.to - (i === SEGMENTS.length - 1 ? 0 : GAP);
-            const fillTo = Math.min(b, shown);
-            const cap = i === 0 || i === SEGMENTS.length - 1 ? "round" : "butt";
-            return (
-              <g key={sg.band}>
-                <path d={arc(a, b)} fill="none" stroke={BAND_VAR[sg.band]} strokeOpacity={0.2} strokeWidth={W} strokeLinecap={cap} />
-                {value !== null && fillTo > a && <path d={arc(a, fillTo)} fill="none" stroke={BAND_VAR[sg.band]} strokeWidth={W} strokeLinecap={i === 0 ? "round" : "butt"} />}
-              </g>
-            );
-          })}
-          {[0, 20, 40, 60, 80, 100].map((v) => {
-            const [x, y] = pt(v, R + 24);
-            return <text key={v} x={x} y={y + 3} textAnchor="middle" className="fill-muted-foreground" fontSize={8.5}>{v}</text>;
-          })}
-          {range && <path d={arc(range[0], range[1], R + W / 2 + 6)} fill="none" className="stroke-foreground/30" strokeWidth={2} strokeLinecap="round" />}
-          {prev !== null && value !== null && prev !== value && (() => {
-            const [x1, y1] = pt(prev, R - W / 2 - 1);
-            const [x2, y2] = pt(prev, R + W / 2 + 1);
-            return <line x1={x1} y1={y1} x2={x2} y2={y2} className="stroke-background" strokeWidth={2.5} />;
-          })()}
-          {value !== null && (
-            <>
-              <circle cx={mx} cy={my} r={W / 2 + 6} className="fill-card" />
-              <circle cx={mx} cy={my} r={W / 2 + 2} className="fill-card" stroke={BAND_VAR[band]} strokeWidth={4.5} />
-            </>
-          )}
-        </svg>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center">
-          <div className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-6xl font-bold leading-none tracking-tighter tabular-nums sm:text-[4.25rem]"}>{value ?? <span className="text-3xl tracking-tight text-muted-foreground">None</span>}</div>
-          <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{value === null ? "No score yet" : "of 100"}</div>
-        </div>
+      <svg viewBox="-8 0 256 134" className={compact ? "w-60" : "w-full max-w-[23rem]"} role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
+        <defs>
+          <radialGradient id={`glow${gid}`} cx="50%" cy="100%" r="75%">
+            <stop offset="0" stopColor={tone} stopOpacity={value === null ? 0 : 0.2} />
+            <stop offset="1" stopColor={tone} stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id={`needle${gid}`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor={tone} />
+            <stop offset="0.45" stopColor="var(--foreground)" />
+          </linearGradient>
+        </defs>
+
+        {/* Soft wash of the band colour behind the dial. */}
+        <path d={`M ${CX - R + 6} ${CY} A ${R - 6} ${R - 6} 0 0 1 ${CX + R - 6} ${CY} Z`} fill={`url(#glow${gid})`} />
+
+        {/* Fine scale. */}
+        {Array.from({ length: 51 }, (_, i) => i * 2).map((v) => {
+          const major = v % 20 === 0;
+          const [x1, y1] = pt(v, R - W / 2 - 4);
+          const [x2, y2] = pt(v, R - W / 2 - (major ? 9 : 6.5));
+          return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} className={major ? "stroke-muted-foreground/70" : "stroke-muted-foreground/30"} strokeWidth={major ? 1.1 : 0.7} strokeLinecap="round" />;
+        })}
+
+        {/* Bands: the one the score sits in is lit, the rest step back. */}
+        {SEGMENTS.map((sg, i) => {
+          const active = sg.band === band;
+          return (
+            <path key={sg.band} d={arc(sg.from + (i === 0 ? 0 : GAP), sg.to - (i === SEGMENTS.length - 1 ? 0 : GAP))} fill="none" stroke={BAND_VAR[sg.band]}
+              strokeWidth={active ? W + 2.5 : W} strokeOpacity={value === null ? 0.2 : active ? 1 : 0.32}
+              strokeLinecap={i === 0 || i === SEGMENTS.length - 1 ? "round" : "butt"} style={{ transition: "stroke-opacity .4s, stroke-width .4s" }} />
+          );
+        })}
+
+        {range && (
+          <g>
+            <path d={arc(range[0], range[1], R + W / 2 + 7)} fill="none" stroke={tone} strokeOpacity={0.55} strokeWidth={1.5} strokeLinecap="round" />
+            {range.map((v) => { const [x, y] = pt(v, R + W / 2 + 7); return <circle key={v} cx={x} cy={y} r={1.8} fill={tone} />; })}
+          </g>
+        )}
+        {prev !== null && value !== null && prev !== value && (() => {
+          const [x, y] = pt(prev, R - W / 2 - 15);
+          return <circle cx={x} cy={y} r={2} className="fill-muted-foreground" />;
+        })()}
+
+        {[0, 20, 40, 60, 80, 100].map((v) => {
+          const [x, y] = pt(v, R + W / 2 + (v === 0 || v === 100 ? 0 : 18));
+          return <text key={v} x={x} y={v === 0 || v === 100 ? CY + 15 : y + 3} textAnchor="middle" className="fill-muted-foreground" fontSize={8}>{v}</text>;
+        })}
+
+        {value !== null && (
+          <g>
+            {/* Needle: tapered, tinted towards the tip, with a soft shadow. */}
+            <g transform={`rotate(${shown * 1.8} ${CX} ${CY})`}>
+              <polygon points={`${CX - (R - W / 2 - 12)},${CY} ${CX + 1},${CY - 3.6} ${CX + 9},${CY} ${CX + 1},${CY + 3.6}`} fill="var(--foreground)" opacity={0.12} transform="translate(0 2.5)" />
+              <polygon points={`${CX - (R - W / 2 - 12)},${CY} ${CX + 1},${CY - 3.4} ${CX + 9},${CY} ${CX + 1},${CY + 3.4}`} fill={`url(#needle${gid})`} />
+            </g>
+            {/* Tip: pulses once the needle has settled. */}
+            {settled && (
+              <circle cx={tip[0]} cy={tip[1]} r={3} fill={tone} opacity={0.5}>
+                <animate attributeName="r" values="3;9;3" dur="2.8s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.45;0;0.45" dur="2.8s" repeatCount="indefinite" />
+              </circle>
+            )}
+            <circle cx={tip[0]} cy={tip[1]} r={3} fill={tone} stroke="var(--card)" strokeWidth={1.25} />
+            <circle cx={CX} cy={CY} r={9} className="fill-card" stroke="var(--foreground)" strokeWidth={2.5} />
+            <circle cx={CX} cy={CY} r={3.25} fill={tone} />
+          </g>
+        )}
+      </svg>
+
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-6xl font-bold leading-none tracking-tighter tabular-nums sm:text-[4.25rem]"}>
+          {value === null ? <span className="text-2xl tracking-tight text-muted-foreground">No score yet</span> : Math.round(Math.min(100, shown))}
+        </span>
+        {value !== null && <span className="text-sm text-muted-foreground">of 100</span>}
       </div>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
         <BandBadge band={band} />
         {value !== null && prev !== null && <span className="text-sm"><Change value={value - prev} vs={prevLabel} /></span>}
       </div>

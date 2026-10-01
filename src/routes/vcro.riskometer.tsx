@@ -61,10 +61,13 @@ function RiskometerPage() {
         <RiskometerCard s={s} ready={ready} />
         <div className="flex flex-col gap-4 lg:col-span-8">
           <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-            <StatCard ready={ready} label="High or Critical" icon={UserRoundX} value={fmt(s.highCount)} caption={`${pct(s.highShare)} of people · ${fmt(s.enteredHigh)} new this month`}
+            <StatCard ready={ready} label="High or Critical" icon={UserRoundX} value={fmt(s.highCount)} caption={`${pct(s.highShare)} of people`}
+              chip={{ text: s.enteredHigh ? `+${fmt(s.enteredHigh)} new` : "None new", tone: s.enteredHigh ? "bad" : "good" }}
               onClick={() => navigate({ to: "/vcro/people", search: { band: "High" } })} />
-            <StatCard ready={ready} label="Report rate" icon={ShieldCheck} value={pct(s.reportRate)} caption={`of simulations reported · ${pct(s.failRate)} failed`} />
-            <StatCard ready={ready} label="Repeat clickers" icon={Repeat} value={fmt(s.repeatCount)} caption="Failed 2 or more in 180 days"
+            <StatCard ready={ready} label="Report rate" icon={ShieldCheck} value={pct(s.reportRate)} caption="Simulated attacks reported"
+              chip={{ text: `${pct(s.failRate)} failed`, tone: s.reportRate >= s.failRate ? "neutral" : "bad" }} />
+            <StatCard ready={ready} label="Repeat clickers" icon={Repeat} value={fmt(s.repeatCount)} caption="2 or more fails in 180 days"
+              chip={{ text: `${pct(s.repeatCount / s.total)} of people` }}
               onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "repeat-clickers" } })} />
             <StatCard ready={ready} label="Very attacked VIPs" icon={Crosshair} value={fmt(s.vipAttacked)} caption="Senior and heavily targeted"
               onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "very-attacked-vips" } })} />

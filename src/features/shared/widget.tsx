@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import type { LucideIcon } from "lucide-react";
+import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -64,24 +64,33 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 }
 
 export function StatCard({
-  label, icon: Icon, value, caption, ready, active, onClick, headerExtra,
+  label, icon: Icon, value, caption, ready, active, onClick, headerExtra, chip,
 }: {
   label: string; icon: LucideIcon; value: ReactNode; caption: string; ready: boolean; active?: boolean; onClick?: () => void; headerExtra?: ReactNode;
+  /** A short secondary figure shown beside the value, for example a change or a companion rate. */
+  chip?: { text: string; tone?: "good" | "bad" | "neutral" } | undefined;
 }) {
+  const tone = chip?.tone === "good" ? "bg-success/10 text-success" : chip?.tone === "bad" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground";
   const body = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}<InfoTip label={label} /></span>
-        <span className="flex items-center gap-2">{headerExtra}<Icon className="size-4 text-muted-foreground" aria-hidden /></span>
+      <div className="flex min-h-9 items-start justify-between gap-2">
+        <span className="text-[13px] font-medium leading-snug text-muted-foreground">{label} <span className="inline-block translate-y-0.5"><InfoTip label={label} /></span></span>
+        <span className="flex shrink-0 items-center gap-2">{headerExtra}<Icon className="size-4 text-muted-foreground/70" aria-hidden /></span>
       </div>
-      {ready ? <div className="mt-3 text-2xl font-bold tracking-tight tabular-nums sm:text-[28px]">{value}</div> : <Skeleton className="mt-3 h-8 w-20" />}
-      <div className="mt-1 text-xs text-muted-foreground">{caption}</div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+        {ready ? <span className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{value}</span> : <Skeleton className="h-7 w-20" />}
+        {ready && chip && <span className={cn("whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums", tone)}>{chip.text}</span>}
+      </div>
+      <div className="mt-2.5 flex items-end justify-between gap-2 text-xs leading-snug text-muted-foreground">
+        <span className="line-clamp-2">{caption}</span>
+        {onClick && <ArrowUpRight className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden />}
+      </div>
     </>
   );
   const cls = cn(
-    "rounded-2xl border bg-card p-4 text-left transition-colors hover:border-foreground/20 sm:p-5 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)]",
-    active && "border-2 border-foreground p-[15px] sm:p-[19px]",
-    onClick && "cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "group flex min-w-0 flex-col rounded-2xl border bg-card p-5 text-left shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition-colors",
+    active && "border-2 border-foreground p-[19px]",
+    onClick && "cursor-pointer hover:border-foreground/25 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   );
   return onClick ? (
     <div role="button" tabIndex={0} className={cls} onClick={onClick} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}>{body}</div>

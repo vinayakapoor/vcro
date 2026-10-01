@@ -76,7 +76,7 @@ export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "E
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
   return (
     <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <div className="flex flex-1 items-center justify-center px-2 py-2 sm:py-8"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
+      <div className="flex flex-1 items-center justify-center px-2 py-2 sm:py-4"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t pt-4">
         <ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} />
         <Link to="/vcro/reports" search={{ tab: "overview" }} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">

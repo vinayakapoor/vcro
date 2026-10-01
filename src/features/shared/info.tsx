@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 /** Plain-language explanations shown behind every (i) button, keyed by card or panel title. */
 export const GLOSSARY: Record<string, string> = {
-  "Riskometer": "The organisation's human risk score from 0 to 100. Higher means riskier. It blends Behaviour, Exposure, Privilege and Reporting signals. The outer band shows the likely range given how much data is connected.",
+  "Riskometer": "The organisation's human risk score from 0 to 100. Higher means riskier. It blends Behaviour, Exposure, Privilege and Reporting signals. The needle points at the score. The thin outer arc is the likely range given how much data is connected, and the small tick inside the arc is last month.",
   "Confidence": "How much of the scoring model is fed by connected sources. 100% means every signal is live. Low confidence means the score could move once more sources connect.",
   "Score confidence": "How much of the scoring model is fed by connected sources. 100% means every signal is live.",
   "Avg confidence": "Average share of the scoring model fed by connected sources, per person.",
