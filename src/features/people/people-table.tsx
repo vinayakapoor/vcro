@@ -7,7 +7,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigg
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DataTable, type Column, type Filter } from "@/features/shared/data-table";
-import { BandBadge, ChannelBadge, SoftBadge, TagBadge } from "@/features/shared/band";
+import { BandBadge, ChannelBadge, SoftBadge } from "@/features/shared/band";
+import { TagList } from "@/features/shared/tags";
 import { usePrefs } from "@/features/shared/prefs";
 import { CHANNELS, DEPARTMENTS, LOCATIONS, PREV_MONTH, TAGS, customTagsByPerson, fmt, formatAge, historyOf, initials, managerName, pinMany, pseudonym, tagPeople, togglePinned, useCustomTags, usePinned, useSignals, type ScoredPerson } from "@/lib/api";
 import type { Band } from "@/lib/scoring";
@@ -55,7 +56,7 @@ export function PeopleTable({ people, initial = {}, toolbarExtra, exportName = "
     ) : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestSignal?.value ?? -1 },
     { id: "channel", header: "Weakest channel", cell: (p) => (p.weakestChannel ? <ChannelBadge channel={p.weakestChannel} /> : <span className="text-muted-foreground">None</span>), sort: (p) => p.weakestChannel ?? "" },
     { id: "lure", header: "Top lure", cell: (p) => (p.topLure ? <SoftBadge>{p.topLure}</SoftBadge> : <span className="text-muted-foreground">None</span>), sort: (p) => p.topLure ?? "" },
-    { id: "tags", header: "Tags", cell: (p) => { const t = tagsOf(p); return <div className="flex max-w-56 flex-wrap gap-1">{t.slice(0, 3).map((x) => <TagBadge key={x} tag={x} />)}{t.length > 3 && <span className="rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground" title={t.slice(3).join(", ")}>+{t.length - 3}</span>}</div>; } },
+    { id: "tags", header: "Tags", cell: (p) => <TagList tags={p.tags} custom={custom.get(p.id) ?? []} />, sort: (p) => tagsOf(p).length },
     { id: "confidence", header: "Confidence", cell: (p) => <span className={`tabular-nums ${p.lowConfidence ? "text-warning" : ""}`}>{p.confidence}%</span>, sort: (p) => p.confidence },
     { id: "last", header: "Last simulation", cell: (p) => <span className="whitespace-nowrap tabular-nums">{formatAge(p.lastSimDays)}</span>, sort: (p) => -(p.lastSimDays ?? 9999) },
   ];

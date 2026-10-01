@@ -6,7 +6,7 @@ import {
   ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
 } from "recharts";
 import { toast } from "sonner";
-import { ChevronDown, Info, Play, RotateCcw, Users, X } from "lucide-react";
+import { ArrowRight, Info, Play, RotateCcw, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -19,7 +19,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, LURES, PREV_MONTH, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  DEPARTMENTS, LURES, PREV_MONTH, bestNextSources, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -75,10 +75,10 @@ export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
   const top = s.drivers.slice(0, 4);
   const max = Math.max(1, ...s.bands.map((b) => b.count));
   return (
-    <Widget title="Riskometer" ready={ready} className="lg:col-span-5" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} />
+    <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-5" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
+      <div className="flex flex-1 items-center justify-center py-2"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
 
-      <div className="mt-5 border-t pt-4">
+      <div className="mt-3 border-t pt-4">
         <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>People by band</span><span className="tabular-nums">{fmt(s.scored)} scored</span></div>
         <div className="space-y-1">
           {s.bands.map((b) => (
@@ -455,55 +455,55 @@ export function ActionsCard({ ready }: { ready: boolean }) {
   );
 }
 
+const TILE_TO: Record<string, string> = { Behaviour: "What people do", Attitude: "How people feel about security", Exposure: "How targeted and visible people are", Privilege: "What people can reach", Reporting: "How people report threats", "AI identities": "AI agents people own" };
+
 export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage> }) {
-  const [open, setOpen] = useState(false);
+  const sig = useSignals();
   const live = cov.sources.filter((x) => x.on);
-  const off = cov.sources.filter((x) => !x.on);
-  const chip = (x: (typeof cov.sources)[number]) => x.kind === "Integration" ? (
-    <Link key={x.id} to="/vcro/signals/$id" params={{ id: x.id }} title={x.on ? "Manage" : "Connect"}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors hover:border-foreground/30 hover:text-foreground ${x.on ? "bg-card" : "border-dashed text-muted-foreground"}`}>
-      <span className={`size-1.5 rounded-full ${x.on ? "bg-success" : "bg-muted-foreground/40"}`} aria-hidden />{x.name}
-    </Link>
-  ) : (
-    <span key={x.id} className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-xs"><span className="size-1.5 rounded-full bg-success" aria-hidden />{x.name}</span>
-  );
+  const next = ready ? bestNextSources(sig) : [];
   return (
-    <Widget title="Signals feeding the score" ready={ready} className="flex-1"
+    <Widget title="Signals feeding the score" ready={ready} className="flex flex-1 flex-col" contentClassName="flex flex-1 flex-col"
       action={<Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>}>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {cov.pillars.map((p) => (
-          <div key={p.pillar} className="rounded-xl border bg-muted/40 p-3">
+          <div key={p.pillar} className="rounded-xl border bg-muted/40 p-3" title={p.from.length ? `From ${p.from.join(", ")}` : undefined}>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{p.pillar}</span>
               <span className="text-xs tabular-nums text-muted-foreground">{p.active}/{p.total}</span>
             </div>
-            {p.coverage === 0 && p.pillar === "AI identities"
-              ? <Link to="/vcro/signals/$id" params={{ id: "int-ai" }} className="mt-1 block text-sm font-semibold underline underline-offset-2">Connect</Link>
-              : <div className="mt-1 font-mono text-xl font-bold tabular-nums">{p.coverage}%</div>}
+            <div className="mt-1 font-mono text-xl font-bold tabular-nums">{p.coverage}%</div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={`h-full rounded-full ${p.coverage === 100 ? "bg-success" : p.coverage >= 70 ? "bg-foreground" : "bg-band-high"}`} style={{ width: `${p.coverage}%` }} />
+            </div>
+            <div className="mt-2 text-[11px] leading-snug text-muted-foreground">
+              <span className="block text-foreground/80">{TILE_TO[p.pillar]}</span>
+              {p.from.length ? <span className="block truncate">From {p.from.slice(0, 2).join(", ")}{p.from.length > 2 && ` +${p.from.length - 2}`}</span>
+                : <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium text-foreground underline underline-offset-2">Connect a source</Link>}
             </div>
           </div>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="tabular-nums">{live.length} of {cov.sources.length} sources live · {fmt(cov.events30d)} events in 30 days</span>
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          {open ? "Hide sources" : `Show all ${cov.sources.length} sources`}<ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
-        </button>
+      <p className="mt-2 text-xs text-muted-foreground">Percentages show how much of each part of the model has live data. Attitude is part of Behaviour, shown on its own because it comes from check-in questions, not events.</p>
+
+      <div className="mt-auto pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-xs">
+          <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{live.length} of {cov.sources.length} sources connected</span> · {fmt(cov.events30d)} events in 30 days</span>
+          {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium underline underline-offset-2">See all {next.length} you can add</Link>}
+        </div>
+        {next.length > 0 ? (
+          <ul className="mt-2 divide-y rounded-xl border">
+            {next.slice(0, 3).map((n) => (
+              <li key={n.id}>
+                <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">Adds {n.signals} {n.signals === 1 ? "signal" : "signals"}</span></span>
+                  <span className="shrink-0 rounded-md bg-success/10 px-1.5 py-0.5 text-xs font-medium tabular-nums text-success">+{n.gain}% confidence</span>
+                  <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-2 rounded-xl border bg-success/5 p-3 text-sm text-success">Every source is connected. The score has full data behind it.</p>}
       </div>
-      {off.length > 0 && !open && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-muted-foreground">Ready to connect</span>{off.map(chip)}
-        </div>
-      )}
-      {open && (
-        <div className="mt-2 space-y-2">
-          <div className="flex flex-wrap gap-1.5">{live.map(chip)}</div>
-          <div className="flex flex-wrap gap-1.5">{off.map(chip)}</div>
-        </div>
-      )}
     </Widget>
   );
 }
@@ -536,16 +536,18 @@ export function WeakestSignalsCard({ ready, items, className }: { ready: boolean
 
 export function HeatmapCard({ ready, rows, className }: { ready: boolean; rows: ReturnType<typeof import("@/lib/api").deptHeatmap>; className?: string }) {
   const navigate = useNavigate();
-  const cats = rows[0]?.cells.map((c) => c.category) ?? [];
+  const all = rows[0]?.cells.map((c) => c.category) ?? [];
+  const live = all.filter((c) => rows.some((r) => r.cells.find((x) => x.category === c)?.value != null));
+  const off = all.filter((c) => !live.includes(c));
   return (
     <Widget title="Risk heatmap" ready={ready} className={className}
-      action={<span className="text-xs text-muted-foreground">Department × signal category, 0-100</span>}>
+      action={<span className="text-xs text-muted-foreground">Department × signal category, 0 to 100</span>}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-separate border-spacing-1 text-xs">
+        <table className="w-full min-w-[760px] border-separate border-spacing-1 text-xs">
           <thead>
             <tr>
               <th className="w-36" />
-              {cats.map((c) => <th key={c} className="h-16 px-1 align-bottom font-medium text-muted-foreground"><span className="block leading-tight">{c}</span></th>)}
+              {live.map((c) => <th key={c} className="h-16 px-1 align-bottom font-medium text-muted-foreground"><span className="block leading-tight">{c}</span></th>)}
             </tr>
           </thead>
           <tbody>
@@ -554,8 +556,8 @@ export function HeatmapCard({ ready, rows, className }: { ready: boolean; rows: 
                 <th className="pr-2 text-left font-medium">
                   <button type="button" className="hover:underline" onClick={() => navigate({ to: "/vcro/people", search: { dept: r.department } })}>{r.department}</button>
                 </th>
-                {r.cells.map((c) => (
-                  <td key={c.category} title={`${r.department} · ${c.category}: ${c.value ?? "Not connected"}`}
+                {r.cells.filter((c) => live.includes(c.category)).map((c) => (
+                  <td key={c.category} title={`${r.department} · ${c.category}: ${c.value ?? "no data"}`}
                     className="h-9 rounded-md text-center font-medium tabular-nums transition-transform hover:scale-105"
                     style={c.value === null ? undefined : { background: heat(c.value) }}>
                     {c.value === null ? <span className="text-muted-foreground">·</span> : c.value}
@@ -566,10 +568,11 @@ export function HeatmapCard({ ready, rows, className }: { ready: boolean; rows: 
           </tbody>
         </table>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <span>0</span>
-        <span className="h-2 w-40 rounded-full" style={{ background: `linear-gradient(90deg, ${BAND_VAR.Low}, ${BAND_VAR.Guarded}, ${BAND_VAR.Elevated}, ${BAND_VAR.High}, ${BAND_VAR.Critical})` }} />
-        <span>100</span><span className="ml-2">· Not connected</span>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-2"><span>0</span>
+          <span className="h-2 w-40 rounded-full" style={{ background: `linear-gradient(90deg, ${heat(5)}, ${heat(30)}, ${heat(50)}, ${heat(70)}, ${heat(95)})` }} />
+          <span>100, higher is riskier</span></span>
+        {off.length > 0 && <span className="ml-auto">{off.join(" and ")} {off.length === 1 ? "appears" : "appear"} once a source is connected. <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium text-foreground underline underline-offset-2">Add a source</Link></span>}
       </div>
     </Widget>
   );

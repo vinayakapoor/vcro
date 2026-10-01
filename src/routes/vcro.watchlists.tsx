@@ -50,7 +50,7 @@ function WatchlistsPage() {
   const lists = watchlistSummary(sig, useSavedWatchlists(), usePinned(), tags);
   const { group } = Route.useSearch();
   const [view, setView] = useState("cards");
-  const sel = lists.find((l) => l.id === group) ?? lists[0]!;
+  const sel = lists.find((l) => l.id === group && !l.needs) ?? lists[0]!;
   const watched = new Map(lists.filter((l) => l.kind !== "who" || l.id === "very-attacked-vips").flatMap((l) => l.members.map((m) => [m.id, m] as const)));
   const highWatched = [...watched.values()].filter((m) => m.band === "High" || m.band === "Critical").length;
   const own = lists.filter((l) => l.kind === "own");
@@ -88,7 +88,14 @@ function WatchlistsPage() {
             <div className="mb-2"><h2 className="text-sm font-semibold">{sec.title} <span className="font-normal text-muted-foreground">· {items.length}</span></h2><p className="text-xs text-muted-foreground">{sec.hint}</p></div>
             {!items.length ? <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Nothing here yet. Use Create watchlist or Manage tags above.</div> : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {items.map((l) => (
+                {items.map((l) => l.needs ? (
+                  <Link key={l.id} to="/vcro/signals/$id" params={{ id: l.needs.sourceId }}
+                    className="group flex flex-col rounded-xl border border-dashed p-4 transition hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <div className="flex items-center gap-2 text-sm font-semibold"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(l.name)}</span>{l.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{l.rule}</div>
+                    <div className="mt-auto pt-4 text-xs"><span className="text-muted-foreground">This tag comes from {l.needs.source}.</span> <span className="font-medium underline underline-offset-2">Connect it to start tagging</span></div>
+                  </Link>
+                ) : (
                   <Link key={l.id} to="/vcro/watchlists" search={{ group: l.id }} resetScroll={false}
                     className={cn("group rounded-xl border bg-card p-4 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       l.id === sel.id && "ring-2 ring-foreground")}>
@@ -119,7 +126,7 @@ function WatchlistsPage() {
           <table className="w-full min-w-[720px] text-sm">
             <thead><tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground"><th className="px-4 py-2 font-medium">Group</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 text-right font-medium">People</th><th className="px-3 py-2 text-right font-medium">High or Critical</th><th className="px-3 py-2 font-medium">Average score</th><th className="px-3 py-2 font-medium">Change</th></tr></thead>
             <tbody>
-              {lists.map((l) => (
+              {lists.filter((l) => !l.needs).map((l) => (
                 <tr key={l.id} className={cn("border-b last:border-0 hover:bg-muted/50", l.id === sel.id && "bg-muted/60")}>
                   <td className="px-4 py-2.5"><Link to="/vcro/watchlists" search={{ group: l.id }} resetScroll={false} className="font-medium underline-offset-2 hover:underline">{l.name}</Link><div className="max-w-md truncate text-xs text-muted-foreground">{l.rule}</div></td>
                   <td className="px-3 py-2.5 text-muted-foreground">{l.kind === "who" ? "Tag" : l.kind === "behaviour" ? "Behaviour" : "Yours"}</td>

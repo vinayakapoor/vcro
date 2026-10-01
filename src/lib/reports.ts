@@ -130,7 +130,7 @@ export function buildReport(id: TemplateId, s: SignalState, set: Settings): Repo
       ["Person", "Department", "Simulations", "Failed", "Reported", "Last simulation", "Training complete", "Training overdue", "Policy acknowledged"],
       ...people.map((p) => {
         const sim = p.channels.reduce((a, c) => ({ n: a.n + c.attempts, f: a.f + c.failures, r: a.r + c.reports }), { n: 0, f: 0, r: 0 });
-        const yes = (k: string, good: (v: number) => boolean) => { const v = p.readings[k]?.value; return v == null ? "No data" : good(v) ? "Yes" : "No"; };
+        const yes = (k: string, good: (v: number) => boolean) => { const v = p.now[k]?.value; return v == null ? "No data" : good(v) ? "Yes" : "No"; };
         return [nm(p), p.department, sim.n, sim.f, sim.r, formatAge(p.lastSimDays), yes("lrn-complete", (v) => v < 50), yes("lrn-overdue", (v) => v > 60), yes("cul-policy", (v) => v < 50)];
       }),
     ]);

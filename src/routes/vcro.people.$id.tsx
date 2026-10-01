@@ -11,14 +11,17 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Widget, EmptyLine } from "@/features/shared/widget";
 import { InfoTip } from "@/features/shared/info";
 import { Gauge } from "@/features/shared/gauge";
-import { DeltaBadge, PayloadBadge, SoftBadge, StatusBadge, TagBadge } from "@/features/shared/band";
+import { DeltaBadge, PayloadBadge, SoftBadge, StatusBadge } from "@/features/shared/band";
 import { usePrefs, useReady } from "@/features/shared/prefs";
 import { AXIS, ChartTip, ConfidenceLine } from "@/features/riskometer/widgets";
 import {
   ELEMENTS, LURES, PREV_MONTH, WORKFLOWS, clearRun, formatAge, formatStamp, getPerson, initials, managerName, nextSteps, pseudonym, queueRun, togglePinned,
   tagPeople, untagPerson, useCustomTags, usePinned, useRuns, useSignals,
 } from "@/lib/api";
-import { PERSON_BY_ID, personDetail, type ActivityType } from "@/data/people";
+import { PERSON_BY_ID, personActivity, type ActivityType, type Finding } from "@/data/people";
+import { TagList } from "@/features/shared/tags";
+import { BAND_VAR } from "@/features/shared/band";
+import { SOURCES, accessFindings, exposureFindings, missingSources } from "@/lib/api";
 
 const SKILL_LEVELS = ["Starter", "Aware", "Capable", "Strong", "Champion"];
 const SKILL_CUTS = [0, 40, 55, 70, 85];
@@ -47,6 +50,30 @@ function PersonNotFound() {
 const SEV = { High: "text-band-critical", Medium: "text-band-high", Low: "text-muted-foreground" } as const;
 const TYPES: ActivityType[] = ["Simulation", "Real threat", "Training", "JIT nudge", "Announcement"];
 
+function Findings({ items, none, missing }: { items: Finding[]; none: string; missing: { id: string; name: string }[] }) {
+  return (
+    <>
+      {items.length ? (
+        <ul className="space-y-2.5 text-sm">
+          {items.map((o) => (
+            <li key={o.item} className="flex items-start justify-between gap-2">
+              <span className="min-w-0"><span className="block">{o.item}</span><span className="block text-xs text-muted-foreground">From {SOURCES.find((x) => x.id === o.sourceId)?.name}</span></span>
+              <SoftBadge className={SEV[o.level]}>{o.level}</SoftBadge>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-sm text-muted-foreground">{none}</p>}
+      {missing.length > 0 && (
+        <div className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+          More would show with{" "}
+          {missing.slice(0, 3).map((m, i) => <span key={m.id}>{i > 0 && ", "}<Link to="/vcro/signals/$id" params={{ id: m.id }} className="font-medium text-foreground underline underline-offset-2">{m.name}</Link></span>)}
+          {missing.length > 3 && ` and ${missing.length - 3} more`} connected.
+        </div>
+      )}
+    </>
+  );
+}
+
 function PersonPage() {
   const { id } = Route.useParams();
   const ready = useReady();
@@ -59,7 +86,8 @@ function PersonPage() {
   const p = getPerson(signals, id);
   if (!p) return <PersonNotFound />;
   const name = privacy ? pseudonym(p.id) : p.name;
-  const detail = personDetail(p);
+  const allActivity = personActivity(p);
+  const custom = customTags.filter((t) => t.members.includes(p.id));
   const isPinned = pinned.includes(p.id);
   const myRuns = runs.filter((r) => r.key.startsWith(`${p.id}:`) && r.status === "Queued");
   const queue = (workflow: string) => {
@@ -67,20 +95,22 @@ function PersonPage() {
     toast.success(`${workflow} queued for ${name}`, { description: "Sent to Workflows. Status stays on this page until it completes." });
   };
 
-  // Waterfall
-  const contribs = p.contributions.map((c) => ({ label: c.category, points: Math.round(c.points * 10) / 10 }));
-  const impactPts = Math.round(p.likelihood * (p.impact - 1) * 10) / 10;
-  const bars = [...contribs, { label: `Privilege impact x${p.impact}`, points: impactPts }];
-  let run = 0;
-  const steps = bars.map((b) => { const start = run; run += b.points; return { ...b, start, end: run }; });
-  const maxV = Math.max(40, Math.ceil(Math.max(...steps.map((s) => Math.max(s.start, s.end))) / 10) * 10);
+  // How the score adds up
+  const pts = (pillar: string) => Math.round(p.contributions.filter((c) => c.pillar === pillar).reduce((a, c) => a + c.points, 0) * 10) / 10;
+  const drivers = p.contributions.filter((c) => c.pillar !== "Reporting").map((c) => ({ ...c, points: Math.round(c.points * 10) / 10 })).sort((a, b) => b.points - a.points);
+  const maxDriver = Math.max(1, ...drivers.map((d) => d.points));
+  const top3 = drivers.slice(0, 3).map((d) => d.category);
+  const reportingPts = pts("Reporting");
 
   const lures = LURES.map((l) => ({ lure: l, rate: p.lures[l] }));
-  const activity = detail.activity.filter((a) => type === "All" || a.type === type);
+  const activity = allActivity.filter((a) => type === "All" || a.type === type);
   const behaviourSafe = 100 - p.behaviour;
   const hasSims = p.sims.length > 0;
-  const missing = [!hasSims && "a simulation result", !ELEMENTS.some((e) => e.category === "Learning" && signals.active.has(e.id) && p.now[e.id]) && "a learning signal"].filter(Boolean).join(" and ");
+  const missing = [!hasSims && "a simulation result", !ELEMENTS.some((e) => e.category === "Learning" && p.now[e.id]) && "a learning signal"].filter(Boolean).join(" and ");
   const next = p.score === null ? [] : nextSteps(signals, p);
+  const exposure = exposureFindings(p), access = accessFindings(p);
+  const worst = [...p.channels].filter((c) => c.failures > 0).sort((a, b) => b.failRate - a.failRate)[0]?.channel;
+  const first = privacy ? "This person" : p.name.split(" ")[0];
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
@@ -95,17 +125,12 @@ function PersonPage() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1">
               {p.level !== "Individual" && <SoftBadge>{p.level === "Head" ? "Department head" : "People manager"}</SoftBadge>}
-              {p.tags.map((t) => <TagBadge key={t} tag={t} />)}
-              {customTags.filter((t) => t.members.includes(p.id)).map((t) => (
-                <span key={t.id} className="inline-flex items-center gap-1 rounded-md border bg-muted py-0.5 pl-1.5 pr-0.5 text-xs font-medium">{t.name}
-                  <button type="button" aria-label={`Remove tag ${t.name}`} className="grid size-4 place-items-center rounded hover:bg-foreground/10" onClick={() => untagPerson(t.id, p.id)}><X className="size-3" /></button>
-                </span>
-              ))}
+              <TagList tags={p.tags} custom={custom.map((t) => t.name)} max={4} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Plus className="size-3" />Tag</button></DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
-                  <DropdownMenuLabel>{customTags.length ? "Add one of your tags" : "No tags of your own yet"}</DropdownMenuLabel>
-                  {customTags.filter((t) => !t.members.includes(p.id)).map((t) => <DropdownMenuItem key={t.id} onSelect={() => tagPeople(t.id, [p.id])}>{t.name}</DropdownMenuItem>)}
+                  <DropdownMenuLabel>{customTags.length ? "Your tags" : "No tags of your own yet"}</DropdownMenuLabel>
+                  {customTags.map((t) => { const has = t.members.includes(p.id); return <DropdownMenuItem key={t.id} onSelect={() => (has ? untagPerson(t.id, p.id) : tagPeople(t.id, [p.id]))}>{has ? <X className="size-4" /> : <Plus className="size-4" />}{has ? `Remove ${t.name}` : t.name}</DropdownMenuItem>; })}
                   <DropdownMenuItem asChild><Link to="/vcro/watchlists">Manage tags</Link></DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -137,6 +162,16 @@ function PersonPage() {
         </div>
       )}
 
+      {p.score !== null && ready && (
+        <div className="rounded-xl border bg-card p-4 text-sm leading-relaxed" style={{ borderLeft: `4px solid ${BAND_VAR[p.band]}` }}>
+          <span className="font-semibold">{first} scores {p.score}, in the {p.band} band{p.change ? `, ${p.change > 0 ? "up" : "down"} ${Math.abs(p.change)} since ${PREV_MONTH}` : `, unchanged since ${PREV_MONTH}`}.</span>{" "}
+          The biggest drivers are {top3.slice(0, -1).join(", ")} and {top3.at(-1)}.
+          {reportingPts < 0 && ` Reporting threats takes ${Math.abs(reportingPts)} points off.`}
+          {p.impact > 1.02 ? ` Their access raises the result by ${Math.round((p.impact - 1) * 100)}%.` : p.impact < 0.98 ? ` Limited access lowers the result by ${Math.round((1 - p.impact) * 100)}%.` : ""}
+          {next[0] && next[0].impact > 0 && <> The most useful next step is to <span className="font-medium">{next[0].action.charAt(0).toLowerCase() + next[0].action.slice(1)}</span>.</>}
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-12">
         <Widget title="Riskometer" ready={ready} className="lg:col-span-4">
           <Gauge value={p.score} prev={p.prev} prevLabel={PREV_MONTH} compact {...(p.score !== null ? { confidence: p.confidence } : {})} />
@@ -152,7 +187,7 @@ function PersonPage() {
               {p.skill !== null && (
                 <div className="text-right">
                   <div className="text-2xl font-bold tabular-nums">{p.skill}<span className="text-xs font-medium text-muted-foreground"> / 100</span></div>
-                  {p.skillPrev !== null && <div className={`text-xs tabular-nums ${p.skill >= p.skillPrev ? "text-success" : "text-band-critical"}`}>{p.skill >= p.skillPrev ? "+" : ""}{p.skill - p.skillPrev} vs {PREV_MONTH}</div>}
+                  {p.skillPrev !== null && <div className={`text-xs tabular-nums ${p.skill === p.skillPrev ? "text-muted-foreground" : p.skill > p.skillPrev ? "text-success" : "text-band-critical"}`}>{p.skill === p.skillPrev ? "No change" : `${p.skill > p.skillPrev ? "+" : ""}${p.skill - p.skillPrev}`} vs {PREV_MONTH}</div>}
                 </div>
               )}
             </div>
@@ -170,25 +205,33 @@ function PersonPage() {
           </div>
         </Widget>
 
-        <Widget title="Score breakdown" ready={ready} className="lg:col-span-8" empty={p.score === null && { text: `Shown once this person has ${missing}.`, action: null }}>
+        <Widget title="Why this score" ready={ready} className="lg:col-span-8" empty={p.score === null && { text: `Shown once this person has ${missing}.`, action: null }}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl bg-muted/40 p-3 text-sm">
+            {[["What they do", pts("Behaviour"), "Behaviour"], ["How exposed they are", pts("Exposure"), "Exposure"]].map(([label, v, k], i) => (
+              <span key={k} className="flex items-center gap-2">{i > 0 && <span className="text-muted-foreground">+</span>}
+                <span className="rounded-lg border bg-card px-2.5 py-1.5"><span className="block text-[11px] text-muted-foreground">{label}</span><span className="font-semibold tabular-nums">{v} pts</span></span></span>
+            ))}
+            <span className="text-muted-foreground">−</span>
+            <span className="rounded-lg border bg-card px-2.5 py-1.5"><span className="block text-[11px] text-muted-foreground">Reporting credit</span><span className="font-semibold tabular-nums text-success">{Math.abs(reportingPts)} pts</span></span>
+            <span className="text-muted-foreground">×</span>
+            <span className="rounded-lg border bg-card px-2.5 py-1.5"><span className="block text-[11px] text-muted-foreground">What they can reach</span><span className="font-semibold tabular-nums">{p.impact}</span></span>
+            <span className="text-muted-foreground">=</span>
+            <span className="rounded-lg px-3 py-1.5 text-background" style={{ background: BAND_VAR[p.band] }}><span className="block text-[11px] opacity-90">Score</span><span className="font-bold tabular-nums">{p.score}</span></span>
+          </div>
+          <div className="mt-4 mb-1.5 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>Drivers, largest first</span><span>Points</span></div>
           <div className="space-y-1.5">
-            {steps.map((s) => {
-              const lo = Math.max(0, Math.min(s.start, s.end)), hi = Math.max(s.start, s.end);
-              const neg = s.points < 0;
-              const isImpact = s.label.startsWith("Privilege impact");
-              return (
-                <div key={s.label} className="grid grid-cols-[minmax(0,140px)_1fr_68px] items-center gap-3 text-sm sm:grid-cols-[180px_1fr_72px]">
-                  <span className="truncate">{s.label}</span>
-                  <span className="relative h-4 rounded bg-muted/50">
-                    <span className="absolute inset-y-0 rounded" style={{ left: `${(lo / maxV) * 100}%`, width: `${Math.max(0.5, ((hi - lo) / maxV) * 100)}%`, background: neg ? "var(--success)" : isImpact ? "var(--foreground)" : "var(--muted-foreground)" }} />
-                  </span>
-                  <span className={`whitespace-nowrap text-right tabular-nums ${neg ? "text-success" : ""}`}>{s.points > 0 ? "+" : ""}{s.points} pts</span>
-                </div>
-              );
-            })}
-            <div className="grid grid-cols-[minmax(0,140px)_1fr_68px] gap-3 border-t pt-2 text-sm font-semibold sm:grid-cols-[180px_1fr_72px]">
-              <span>Score</span><span className="text-xs font-normal text-muted-foreground">Bars run left to right and add up to the score. Scale 0 to {maxV}.</span><span className="text-right tabular-nums">{p.score}</span>
-            </div>
+            {drivers.map((d) => (
+              <div key={d.category} className="grid grid-cols-[minmax(0,150px)_1fr_52px] items-center gap-3 text-sm sm:grid-cols-[200px_1fr_56px]">
+                <span className="min-w-0"><span className="block truncate">{d.category}</span></span>
+                <span className="h-2 rounded-full bg-muted/60"><span className="block h-full rounded-full" style={{ width: `${Math.max(1.5, (d.points / maxDriver) * 100)}%`, background: d.pillar === "Behaviour" ? "var(--foreground)" : "var(--muted-foreground)" }} /></span>
+                <span className="text-right tabular-nums">{d.points}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-foreground" />What they do</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-muted-foreground" />How exposed they are</span>
+            <span>Access multiplies the total between 0.8 and 1.3.</span>
           </div>
         </Widget>
 
@@ -219,20 +262,23 @@ function PersonPage() {
         <Widget title="Channel results" ready={ready} className="lg:col-span-7" empty={!hasSims && { text: "No simulations have reached this person yet.", action: null }}>
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader><TableRow><TableHead>Channel</TableHead><TableHead className="text-right">Attempts</TableHead><TableHead className="text-right">Failures</TableHead><TableHead className="text-right">Reports</TableHead><TableHead className="whitespace-nowrap text-right">Avg time to click</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Channel</TableHead><TableHead>Fell for</TableHead><TableHead className="text-right">Reported</TableHead><TableHead className="whitespace-nowrap text-right">Time to click</TableHead></TableRow></TableHeader>
               <TableBody>
-                {p.channels.map((c) => (
+                {p.channels.filter((c) => c.attempts > 0).map((c) => (
                   <TableRow key={c.channel}>
-                    <TableCell className="font-medium">{c.channel}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.attempts}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.failures}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.reports}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.avgTtc === null ? <span className="text-muted-foreground">No clicks</span> : `${c.avgTtc} s`}</TableCell>
+                    <TableCell className="font-medium">{c.channel}{c.channel === worst && <span className="ml-2 rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warning">Weakest</span>}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2"><span className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${c.failRate * 100}%`, background: c.failRate >= 0.5 ? "var(--band-high)" : "var(--band-elevated)" }} /></span>
+                        <span className="whitespace-nowrap tabular-nums">{c.failures} of {c.attempts}</span></span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{c.reports} of {c.attempts}</TableCell>
+                    <TableCell className="text-right tabular-nums">{c.avgTtc === null ? <span className="text-muted-foreground">No clicks</span> : c.avgTtc < signals.config.impulsiveSeconds ? <span className="text-warning">{c.avgTtc} s, impulsive</span> : `${c.avgTtc} s`}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">Simulated attacks over the last 12 months. A click under {signals.config.impulsiveSeconds} seconds counts as impulsive.</p>
         </Widget>
         <Widget title="Lure profile" ready={ready} className="lg:col-span-5" empty={!hasSims && { text: "Needs simulation results.", action: null }}>
           <div className="h-60">
@@ -258,10 +304,10 @@ function PersonPage() {
             </ToggleGroup>
           }
           empty={activity.length === 0 && { text: "No activity for this type", action: <Button variant="outline" size="sm" onClick={() => setType("All")}>Show all</Button> }}>
-          <ol className="relative max-h-96 space-y-3 overflow-y-auto border-l pl-5">
+          <ol className="relative ml-1.5 max-h-96 space-y-3 overflow-y-auto border-l pl-5">
             {activity.map((a) => (
               <li key={a.id} className="relative">
-                <span className="absolute -left-[25px] top-1.5 size-2 rounded-full bg-muted-foreground" aria-hidden />
+                <span className="absolute -left-[24px] top-1.5 size-2 rounded-full bg-muted-foreground ring-2 ring-card" aria-hidden />
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium">{a.title}</span>
                   <SoftBadge>{a.type}</SoftBadge>
@@ -274,12 +320,8 @@ function PersonPage() {
           </ol>
         </Widget>
 
-        <Widget title="Exposure" ready={ready} className="lg:col-span-4" empty={detail.osint.length === 0 && { text: "No public exposure findings for this person.", action: null }}>
-          <ul className="space-y-2 text-sm">{detail.osint.map((o) => <li key={o.item} className="flex items-center justify-between gap-2"><span>{o.item}</span><SoftBadge className={SEV[o.severity]}>{o.severity}</SoftBadge></li>)}</ul>
-        </Widget>
-        <Widget title="Privilege" ready={ready} className="lg:col-span-4">
-          <ul className="space-y-2 text-sm">{detail.access.map((o) => <li key={o.item} className="flex items-center justify-between gap-2"><span>{o.item}</span><SoftBadge className={SEV[o.level]}>{o.level}</SoftBadge></li>)}</ul>
-        </Widget>
+        <Widget title="Exposure" ready={ready} className="lg:col-span-4"><Findings items={exposure} none="Nothing public found about this person." missing={missingSources(signals, "Exposure")} /></Widget>
+        <Widget title="Privilege" ready={ready} className="lg:col-span-4"><Findings items={access} none="Standard user access." missing={missingSources(signals, "Privilege")} /></Widget>
         <Widget title="Behaviour profile" ready={ready} className="lg:col-span-4" empty={p.score === null && { text: "Needs a score.", action: null }}>
           <svg viewBox="-10 0 250 200" className="w-full" role="img" aria-label={`Knowledge ${p.knowledge}, safe behaviour ${behaviourSafe}`}>
             <rect x="30" y="8" width="200" height="160" rx="4" fill="none" stroke="var(--border)" />

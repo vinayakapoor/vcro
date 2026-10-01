@@ -5,7 +5,7 @@ import {
   DEPARTMENTS, ELEMENTS, HEADCOUNT, INTERVENTIONS, LOCATIONS, MONTHS, SIM_ELEMENT_CHANNEL, SOURCES, TEMPLATES,
   TODAY, WORKFLOWS, type Department,
 } from "@/data/catalogue";
-import { PEOPLE, PERSON_BY_ID, TAGS, type Person, type Tag } from "@/data/people";
+import { PEOPLE, PERSON_BY_ID, TAGS, type Finding, type Person, type Tag } from "@/data/people";
 import {
   bandFor, CHANNELS, computeScore, confidenceFor, DEFAULT_CONFIG, elementWeights, failed, isImpulsive, LURES, rates, scoreOnly,
   simulationRisk, skillScore, type Band, type Channel, type Lure, type Readings, type ScoreResult, type ScoringConfig, type SimEvent,
@@ -197,9 +197,11 @@ const isHigh = (b: Band) => b === "High" || b === "Critical";
 // ---------- People ----------
 export type ChannelStat = { channel: Channel; attempts: number; failures: number; reports: number; failRate: number; reportRate: number; avgTtc: number | null };
 export type ScoredPerson = Person & ScoreResult & {
+  /** Built-in tags this person carries, from connected sources only. */
+  tags: Tag[];
   prev: number | null;
   change: number | null;
-  /** Readings used for today's score, simulations included. */
+  /** Today's readings from connected, switched-on signals only. Nothing from an unconnected source is in here. */
   now: Readings;
   channels: ChannelStat[];
   lures: Record<Lure, number>;
@@ -268,8 +270,21 @@ function scored(s: SignalState): Scored {
     const driversNow: Record<string, number> = {}, driversPrev: Record<string, number> = {};
     let nNow = 0, nPrev = 0;
     const people = PEOPLE.map((p): ScoredPerson => {
-      const now = readingsAt(p, 0, s.config);
+      const all = readingsAt(p, 0, s.config);
+      const now: Readings = {};
+      for (const id of s.active) if (all[id]) now[id] = all[id];
       const cur = computeScore(ELEMENTS, now, s.active, s.weights, s.config);
+      const v = (id: string) => now[id]?.value ?? 0;
+      const f = p.flags, c = s.connected;
+      const tags: Tag[] = [];
+      if (f.vip) tags.push("VIP");
+      if (f.privileged && c.has("int-identity")) tags.push("Privileged");
+      if (f.veryAttacked && c.has("esa")) tags.push("Very attacked");
+      if (v("exp-breach") > 60) tags.push("Externally exposed");
+      if (v("prv-fin") > 60) tags.push("Financial authority");
+      if (v("prv-data") > 60) tags.push("Sensitive data");
+      if (c.has("int-hr")) { if (f.joiner) tags.push("Joiner or mover"); if (f.leaver) tags.push("Leaver"); if (f.remote) tags.push("Remote worker"); }
+      if (f.contractor && c.has("int-third")) tags.push("Contractor");
       const before = computeScore(ELEMENTS, readingsAt(p, 1, s.config), s.active, s.weights, s.config);
       if (cur.score !== null) { nNow++; for (const c of cur.contributions) driversNow[c.category] = (driversNow[c.category] ?? 0) + c.points * cur.impact; }
       if (before.score !== null) { nPrev++; for (const c of before.contributions) driversPrev[c.category] = (driversPrev[c.category] ?? 0) + c.points * before.impact; }
@@ -288,7 +303,7 @@ function scored(s: SignalState): Scored {
       let topDriver: string | null = null, top = 0;
       for (const c of cur.contributions) if (c.points > top) { top = c.points; topDriver = c.category; }
       return {
-        ...p, ...cur, now, prev: before.score,
+        ...p, ...cur, tags, now, prev: before.score,
         change: cur.score !== null && before.score !== null ? cur.score - before.score : null,
         channels, lures, weakestChannel: weakest,
         weakestSignal: ws ? { id: ws.id, name: ws.name, category: ws.category, value: Math.round(now[ws.id]!.value) } : null,
@@ -490,7 +505,7 @@ export function recommendedActions(s: SignalState, auto: Settings["automation"])
       { id: "a3", action: "Brief targeted VIPs", target: "Very attacked VIPs", workflow: "VIP protection briefing", lowEffort: false, fix: ["sim-deepfake", "sim-vish", "sim-callback", "att-confidence"], members: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked"), watchlist: "very-attacked-vips" },
       { id: "a4", action: "Run vishing drill", target: voice.d, workflow: "Vishing awareness drill", lowEffort: false, fix: ["sim-vish", "sim-callback"], members: (p) => p.department === voice.d, dept: voice.d },
       { id: "a5", action: "Assign QR module", target: "Weakest on QR", workflow: "QR safety micro-module", lowEffort: true, fix: ["sim-qr"], members: (p) => p.weakestChannel === "QR" },
-      { id: "a6", action: "Chase overdue training", target: "Overdue training", workflow: "Overdue training reminder", lowEffort: true, fix: ["lrn-overdue", "lrn-complete"], members: (p) => (p.readings["lrn-overdue"]?.value ?? 0) > 60, watchlist: "overdue-training" },
+      { id: "a6", action: "Chase overdue training", target: "Overdue training", workflow: "Overdue training reminder", lowEffort: true, fix: ["lrn-overdue", "lrn-complete"], members: (p) => (p.now["lrn-overdue"]?.value ?? 0) > 60, watchlist: "overdue-training" },
     ];
     return defs.map(({ members, ...d }) => {
       const group = people.filter(members);
@@ -507,12 +522,46 @@ const STEP_FIX: Record<string, string[]> = {
 };
 export function nextSteps(s: SignalState, p: ScoredPerson) {
   const steps: { id: string; action: string; workflow: (typeof WORKFLOWS)[number]; fix: string[] }[] = [];
-  if (p.weakestChannel) steps.push({ id: "channel", action: `Assign ${p.weakestChannel.toLowerCase()} lure coaching`, workflow: "Repeat clicker remediation", fix: [SIM_CHANNEL_ELEMENT[p.weakestChannel]] });
+  if (p.weakestChannel) steps.push({ id: "channel", action: `Assign ${p.weakestChannel === "QR" || p.weakestChannel === "SMS" ? p.weakestChannel : p.weakestChannel.toLowerCase()} lure coaching`, workflow: "Repeat clicker remediation", fix: [SIM_CHANNEL_ELEMENT[p.weakestChannel]] });
   if (p.sims.some((x) => x.outcome === "Data entered" && x.ageDays <= 120)) steps.push({ id: "cred", action: "Reset credentials and coach", workflow: "Credential submitter reset", fix: STEP_FIX["cred"]! });
-  if ((p.readings["lrn-overdue"]?.value ?? 0) > 50) steps.push({ id: "overdue", action: "Complete overdue training", workflow: "Overdue training reminder", fix: STEP_FIX["overdue"]! });
+  if ((p.now["lrn-overdue"]?.value ?? 0) > 50) steps.push({ id: "overdue", action: "Complete overdue training", workflow: "Overdue training reminder", fix: STEP_FIX["overdue"]! });
   if (p.tags.includes("VIP")) steps.push({ id: "vip", action: "Schedule VIP briefing", workflow: "VIP protection briefing", fix: STEP_FIX["vip"]! });
   return steps.map((st) => { const w = whatIf(s, p, st.fix); return { ...st, impact: w === null ? 0 : Math.max(0, p.score! - w) }; })
     .sort((a, b) => b.impact - a.impact).slice(0, 3);
+}
+
+// ---------- Person findings ----------
+
+/** What is public about a person. Empty unless OSINT monitoring is connected. */
+export function exposureFindings(p: ScoredPerson): Finding[] {
+  const v = (id: string) => p.now[id]?.value ?? 0;
+  const out: Finding[] = [];
+  if (v("exp-breach") > 60) out.push({ item: "Work email found in a public breach", level: "High", sourceId: "int-osint" });
+  if (v("exp-contact") > 50) out.push({ item: "Mobile number listed publicly", level: "Medium", sourceId: "int-osint" });
+  if (v("exp-social") > 45) out.push({ item: "Role and manager visible on a social profile", level: "Low", sourceId: "int-osint" });
+  if (v("exp-inbound") > 60) out.push({ item: "Receives a high volume of phishing", level: "Medium", sourceId: "esa" });
+  if (v("exp-imperson") > 60) out.push({ item: "Often impersonated in inbound email", level: "High", sourceId: "int-email" });
+  return out;
+}
+/** What a person can reach or approve, from connected sources only. */
+export function accessFindings(p: ScoredPerson): Finding[] {
+  const v = (id: string) => p.now[id]?.value ?? 0;
+  const out: Finding[] = [];
+  if (v("prv-admin") > 55) out.push({ item: "Holds admin accounts", level: "High", sourceId: "int-identity" });
+  if (v("prv-critical") > 55) out.push({ item: "Signs in to critical systems", level: "High", sourceId: "int-identity" });
+  if (v("prv-mfa") > 60) out.push({ item: "Weak MFA method on their account", level: "Medium", sourceId: "int-identity" });
+  if (v("prv-fin") > 60) out.push({ item: "Payment approval authority", level: "High", sourceId: "recipients" });
+  if (v("prv-shared") > 50) out.push({ item: "Owns shared mailboxes", level: "Medium", sourceId: "recipients" });
+  if (v("prv-data") > 60) out.push({ item: "Regular access to sensitive data", level: "High", sourceId: "int-data" });
+  if (v("prv-standing") > 55) out.push({ item: "Standing privileged access", level: "High", sourceId: "int-pam" });
+  if (v("ai-perms") > 55) out.push({ item: "Owns AI agents with broad permissions", level: "Medium", sourceId: "int-ai" });
+  if (p.level !== "Individual") out.push({ item: p.level === "Head" ? "Leads a department" : "Manages a team", level: "Low", sourceId: "recipients" });
+  return out;
+}
+/** Sources that would add to a person's picture but are not connected. */
+export function missingSources(s: SignalState, pillar: "Exposure" | "Privilege") {
+  const ids = new Set(ELEMENTS.filter((e) => e.pillar === pillar && !s.connected.has(e.sourceId)).map((e) => e.sourceId));
+  return SOURCES.filter((x) => ids.has(x.id));
 }
 
 // ---------- Alerts ----------
@@ -530,21 +579,30 @@ export function signalStats(s: SignalState) {
   const feeding = SOURCES.filter((x) => x.direction !== "Action out");
   return { connectedSources: feeding.filter((x) => s.connected.has(x.id)).length, totalSources: feeding.length, outbound: SOURCES.filter((x) => x.direction === "Action out" && s.connected.has(x.id)).length, active: s.active.size, total: ELEMENTS.length, confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), lastSync: "1 Oct, 10:44" };
 }
+const fromOf = (els: typeof ELEMENTS) => [...new Set(els.map((e) => SOURCES.find((x) => x.id === e.sourceId)!.name))];
 export function signalCoverage(s: SignalState) {
   const pillars = (["Behaviour", "Exposure", "Privilege", "Reporting"] as const).map((pillar) => {
     const els = ELEMENTS.filter((e) => e.pillar === pillar);
     const w = els.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) || 1;
     const live = els.filter((e) => s.active.has(e.id));
-    return { pillar: pillar as string, active: live.length, total: els.length, coverage: Math.round((live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) / w) * 100) };
+    return { pillar: pillar as string, active: live.length, total: els.length, coverage: Math.round((live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) / w) * 100), from: fromOf(live) };
   });
   const att = ELEMENTS.filter((e) => e.category === "Attitude");
   const attLive = att.filter((e) => s.active.has(e.id));
-  pillars.splice(1, 0, { pillar: "Attitude", active: attLive.length, total: att.length, coverage: att.length ? Math.round((attLive.length / att.length) * 100) : 0 });
+  pillars.splice(1, 0, { pillar: "Attitude", active: attLive.length, total: att.length, coverage: att.length ? Math.round((attLive.length / att.length) * 100) : 0, from: fromOf(attLive) });
   const ai = ELEMENTS.filter((e) => e.category === "AI agents");
   const aiLive = ai.filter((e) => s.active.has(e.id));
-  pillars.push({ pillar: "AI identities", active: aiLive.length, total: ai.length, coverage: Math.round((aiLive.length / ai.length) * 100) });
+  pillars.push({ pillar: "AI identities", active: aiLive.length, total: ai.length, coverage: Math.round((aiLive.length / ai.length) * 100), from: fromOf(aiLive) });
   const sources = SOURCES.filter((x) => x.direction !== "Action out").map((x) => ({ ...x, on: s.connected.has(x.id) }));
   return { pillars, sources, events30d: sources.filter((x) => x.on).reduce((a, x) => a + x.events30d, 0), missing: sources.filter((x) => !x.on && x.kind === "Integration") };
+}
+/** Unconnected sources ranked by how much confidence each would add. */
+export function bestNextSources(s: SignalState) {
+  const base = confidenceFor(ELEMENTS, (e) => s.active.has(e.id));
+  return SOURCES.filter((x) => x.direction === "Signal in" && !s.connected.has(x.id)).map((x) => {
+    const g = sourceGain(s, x.id);
+    return { id: x.id, name: x.name, signals: g.signals.length, gain: g.confidence - base };
+  }).sort((a, b) => b.gain - a.gain);
 }
 /** What connecting one more source would add: signals gained and confidence after. */
 export function sourceGain(s: SignalState, sourceId: string) {
@@ -587,10 +645,10 @@ export function awarenessByDept(s: SignalState) {
       const sim = rates(ps.flatMap((p) => p.sims));
       return {
         department: d,
-        completion: pct(ps.map((p) => (p.readings["lrn-complete"]?.value ?? 100) < 50)),
-        overdue: ps.filter((p) => (p.readings["lrn-overdue"]?.value ?? 0) > 60).length,
-        jit: pct(ps.map((p) => (p.readings["lrn-jit"]?.value ?? 100) < 50)),
-        policy: pct(ps.map((p) => (p.readings["cul-policy"]?.value ?? 100) < 50)),
+        completion: pct(ps.map((p) => (p.now["lrn-complete"]?.value ?? 100) < 50)),
+        overdue: ps.filter((p) => (p.now["lrn-overdue"]?.value ?? 0) > 60).length,
+        jit: pct(ps.map((p) => (p.now["lrn-jit"]?.value ?? 100) < 50)),
+        policy: pct(ps.map((p) => (p.now["cul-policy"]?.value ?? 100) < 50)),
         reportRate: Math.round(sim.reportRate * 100), people: ps.length,
       };
     });
@@ -599,7 +657,9 @@ export function awarenessByDept(s: SignalState) {
 
 // ---------- Tags, groups and watchlists ----------
 export type GroupKind = "who" | "behaviour" | "own";
-export type WatchlistDef = { id: string; name: string; rule: string; kind: GroupKind; custom?: boolean; match: (p: ScoredPerson) => boolean };
+export type WatchlistDef = { id: string; name: string; rule: string; kind: GroupKind; custom?: boolean; match: (p: ScoredPerson) => boolean;
+  /** Set when the source that supplies this group is not connected: the group is empty until it is. */
+  needs?: { sourceId: string; source: string } };
 const BAND_MIN: Record<string, number> = { Guarded: 21, Elevated: 41, High: 61, Critical: 81 };
 const ruleTags = (r: WatchlistRule) => [...(r.tags ?? []), ...(r.tag ? [r.tag] : [])];
 export function describeRule(r: WatchlistRule) {
@@ -629,17 +689,17 @@ function builtIn(s: SignalState): WatchlistDef[] {
   const b = (id: string, name: string, rule: string, match: WatchlistDef["match"]): WatchlistDef => ({ id, name, rule, kind: "behaviour", match });
   return [
     { id: "very-attacked-vips", name: "Very attacked VIPs", rule: "Tagged VIP and Very attacked", kind: "who", match: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked") },
-    ...TAGS.map((t): WatchlistDef => ({ id: `tag:${t.name}`, name: t.name, rule: t.about, kind: "who", match: (p) => p.tags.includes(t.name) })),
+    ...TAGS.map((t): WatchlistDef => ({ id: `tag:${t.name}`, name: t.name, rule: t.about, kind: "who", match: (p) => p.tags.includes(t.name), ...(s.connected.has(t.sourceId) ? {} : { needs: { sourceId: t.sourceId, source: t.source } }) })),
     b("top-risk", "Top 10% by risk", `Score ${cut} or above, the top 10% of scored people`, (p) => p.score !== null && p.score >= cut),
     b("new-high", "New this month", `Entered High or Critical since ${PREV_MONTH}`, (p) => isHigh(p.band) && p.prev !== null && p.prev <= 60),
     b("privileged-high", "Privileged and High risk", "Tagged Privileged and in High or Critical", (p) => p.tags.includes("Privileged") && isHigh(p.band)),
     b("repeat-clickers", "Repeat clickers", "2 or more failed simulations in 180 days", (p) => p.fails180 >= 2),
     b("credential-submitters", "Credential submitters", "Entered data in a simulation in 120 days", (p) => p.sims.some((x) => x.outcome === "Data entered" && x.ageDays <= 120)),
     b("impulsive", "Impulsive clickers", `Clicked within ${s.config.impulsiveSeconds} seconds in 180 days`, (p) => p.impulsive),
-    b("overdue-training", "Overdue training", "Overdue training signal above 60", (p) => (p.readings["lrn-overdue"]?.value ?? 0) > 60),
+    b("overdue-training", "Overdue training", "Overdue training signal above 60", (p) => (p.now["lrn-overdue"]?.value ?? 0) > 60),
     b("never-reports", "Never reports", "Reported no simulation in the last 12 months", (p) => p.sims.length > 0 && !p.sims.some((x) => x.reported)),
-    ...(s.active.has("inc-genai") ? [b("shadow-ai", "Unsanctioned GenAI use", "Unsanctioned GenAI signal at 75 or above", (p) => (p.readings["inc-genai"]?.value ?? 0) >= 75)] : []),
-    ...(s.active.has("inc-signin") ? [b("risky-signin", "Risky sign-ins", "Risky sign-in signal at 75 or above", (p) => (p.readings["inc-signin"]?.value ?? 0) >= 75)] : []),
+    ...(s.active.has("inc-genai") ? [b("shadow-ai", "Unsanctioned GenAI use", "Unsanctioned GenAI signal at 75 or above", (p) => (p.now["inc-genai"]?.value ?? 0) >= 75)] : []),
+    ...(s.active.has("inc-signin") ? [b("risky-signin", "Risky sign-ins", "Risky sign-in signal at 75 or above", (p) => (p.now["inc-signin"]?.value ?? 0) >= 75)] : []),
   ];
 }
 export function watchlistSummary(s: SignalState, saved: SavedWatchlist[], pinned: string[], tags: CustomTag[]) {

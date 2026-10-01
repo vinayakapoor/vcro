@@ -2,17 +2,18 @@ import { DEPARTMENTS, ELEMENTS, HEADCOUNT, LOCATIONS, TEMPLATES, type Department
 import type { Channel, Lure, Outcome, Readings, SimEvent } from "@/lib/scoring";
 import { CHANNELS, LURES } from "@/lib/scoring";
 
+/** Every built-in tag names the source that supplies it. A tag only shows while that source is connected. */
 export const TAGS = [
-  { name: "VIP", about: "Executives, board-facing leaders and department heads", source: "Recipients" },
-  { name: "Privileged", about: "Holds admin rights on systems or platforms", source: "Identity provider" },
-  { name: "Very attacked", about: "Receives far more targeted attacks than peers", source: "Email Security (ESA)" },
-  { name: "Externally exposed", about: "Credentials or personal data found in an external breach", source: "OSINT monitoring" },
-  { name: "Financial authority", about: "Can approve payments or change bank details", source: "Recipients" },
-  { name: "Sensitive data", about: "Works with confidential or regulated data every day", source: "Recipients" },
-  { name: "Joiner or mover", about: "Joined or changed role in the last 90 days", source: "HR system" },
-  { name: "Leaver", about: "In a notice period or being offboarded", source: "HR system" },
-  { name: "Contractor", about: "Contractor or vendor staff with system access", source: "HR system" },
-  { name: "Remote worker", about: "Works mostly outside the office network", source: "HR system" },
+  { name: "VIP", about: "Executives, board-facing leaders and department heads", sourceId: "recipients", source: "Recipients" },
+  { name: "Privileged", about: "Holds admin rights on systems or platforms", sourceId: "int-identity", source: "Identity provider" },
+  { name: "Very attacked", about: "Receives far more targeted attacks than peers", sourceId: "esa", source: "Email Security (ESA)" },
+  { name: "Externally exposed", about: "Credentials or personal data found in an external breach", sourceId: "int-osint", source: "OSINT monitoring" },
+  { name: "Financial authority", about: "Can approve payments or change bank details", sourceId: "recipients", source: "Recipients" },
+  { name: "Sensitive data", about: "Works with confidential or regulated data every day", sourceId: "int-data", source: "Data loss prevention" },
+  { name: "Joiner or mover", about: "Joined or changed role in the last 90 days", sourceId: "int-hr", source: "HR system" },
+  { name: "Leaver", about: "In a notice period or being offboarded", sourceId: "int-hr", source: "HR system" },
+  { name: "Contractor", about: "Contractor or vendor staff with system access", sourceId: "int-third", source: "Contractor and third-party directory" },
+  { name: "Remote worker", about: "Works mostly outside the office network", sourceId: "int-hr", source: "HR system" },
 ] as const;
 export type Tag = (typeof TAGS)[number]["name"];
 export type Level = "Head" | "Manager" | "Individual";
@@ -29,14 +30,15 @@ export type Person = {
   department: Department;
   location: (typeof LOCATIONS)[number];
   managerId: string | null;
-  tags: Tag[];
+  /** Facts about the person as each source holds them. Tags are derived from these for connected sources only. */
+  flags: { vip: boolean; privileged: boolean; veryAttacked: boolean; joiner: boolean; leaver: boolean; contractor: boolean; remote: boolean };
   readings: Readings;
   /** Newest first. */
   sims: SimEvent[];
   knowledge: number; // 0-100
   drift: number; // monthly change in non-simulation readings
 };
-export type PersonDetail = { activity: Activity[]; osint: { item: string; severity: Severity }[]; access: { item: string; level: Severity }[] };
+export type Finding = { item: string; level: Severity; sourceId: string };
 
 /** Deterministic generator: one independent stream per person, so the tenant is identical on every load. */
 function rng(seed: number) {
@@ -116,12 +118,13 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
   const role = level === "Head" ? roles.head : level === "Manager" ? pick(roles.manager) : pick(roles.ic);
   const bias = DEPT_BIAS[department];
   // Most people sit near their department norm; a small tail is markedly riskier.
-  const personal = (r() - 0.5) * 50 + (r() < 0.07 ? 22 + r() * 22 : 0);
-  const propensity = Math.max(0.02, Math.min(0.8, 0.06 + (bias + personal) / 150));
+  const risky = r() < 0.08;
+  const personal = (r() - 0.5) * 50 + (risky ? 30 + r() * 40 : 0);
+  const propensity = Math.max(0.02, Math.min(0.85, 0.06 + (bias + personal) / 150 + (risky ? 0.2 : 0)));
 
-  const vip = level === "Head" || department === "Executive Office" || r() < 0.01;
-  const privileged = vip || (department === "IT" && r() < 0.5) || (department === "Finance" && r() < 0.35);
-  const veryAttacked = (vip && r() < 0.55) || r() < 0.08;
+  const vip = level === "Head" || (department === "Executive Office" && (level === "Manager" || r() < 0.4)) || r() < 0.01;
+  const privileged = (vip && r() < 0.45) || (department === "IT" && r() < 0.5) || (department === "Finance" && r() < 0.3) || r() < 0.02;
+  const veryAttacked = (vip && r() < 0.45) || r() < 0.07;
   const joiner = level === "Individual" && r() < 0.06;
   const leaver = !vip && r() < 0.015;
   const contractor = level === "Individual" && !vip && r() < 0.07;
@@ -161,9 +164,9 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
     if (r() < 0.08) continue;
     let v = 38 + bias + personal + (r() - 0.5) * 40;
     if (el.pillar === "Reporting") v = 55 - personal + (r() - 0.5) * 40;
-    if (el.pillar === "Exposure") v = 30 + (veryAttacked ? 35 : 0) + (vip ? 15 : 0) + r() * 30;
+    if (el.pillar === "Exposure") v = 24 + (veryAttacked ? 18 + r() * 38 : 0) + (vip ? r() * 25 : 0) + (risky ? r() * 25 : 0) + r() * 32;
     if (el.pillar === "Privilege") {
-      v = 20 + (privileged ? 40 : 0) + (vip ? 15 : 0) + r() * 25;
+      v = 18 + (privileged ? 28 + r() * 40 : 0) + (vip ? r() * 25 : 0) + r() * 25;
       if (department === "Finance" && el.category === "Financial authority") v += 30;
     }
     readings[el.id] = el.category === "Real-world incidents" ? { value: clamp(v), ageDays: Math.floor(r() * 180) } : { value: clamp(v) };
@@ -172,17 +175,6 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
   if (readings["exp-contractor"]) readings["exp-contractor"] = { value: contractor ? clamp(78 + r() * 20) : 0 };
   if (readings["prv-outlive"] && !contractor) readings["prv-outlive"] = { value: 0 };
   if (readings["prv-data"] && (department === "HR" || department === "Legal" || department === "Finance")) readings["prv-data"] = { value: clamp(readings["prv-data"].value + 30) };
-  const tags: Tag[] = [];
-  if (vip) tags.push("VIP");
-  if (privileged) tags.push("Privileged");
-  if (veryAttacked) tags.push("Very attacked");
-  if ((readings["exp-breach"]?.value ?? 0) > 60) tags.push("Externally exposed");
-  if ((readings["prv-fin"]?.value ?? 0) > 60) tags.push("Financial authority");
-  if ((readings["prv-data"]?.value ?? 0) > 60) tags.push("Sensitive data");
-  if (joiner) tags.push("Joiner or mover");
-  if (leaver) tags.push("Leaver");
-  if (contractor) tags.push("Contractor");
-  if (remote) tags.push("Remote worker");
   if (!noSims) {
     readings["sim-mfa"] = { value: clamp(propensity * 100 + (r() - 0.5) * 30) };
     readings["sim-callback"] = { value: clamp(propensity * 90 + (r() - 0.5) * 30) };
@@ -190,7 +182,7 @@ function build(i: number, department: Department, level: Level, managerIdx: numb
 
   return {
     id, name: `${first} ${last}`, email: `${base}${n > 1 ? n : ""}@demoenterprise.com`, role, level, department, location,
-    managerId: managerIdx === null ? null : pid(managerIdx), tags, readings, sims,
+    managerId: managerIdx === null ? null : pid(managerIdx), flags: { vip, privileged, veryAttacked, joiner, leaver, contractor, remote }, readings, sims,
     knowledge: clamp(100 - (readings["lrn-assess"]?.value ?? 50) + (r() - 0.5) * 10),
     drift: (r() - 0.35) * 0.04,
   };
@@ -219,16 +211,15 @@ function buildTenant(): Person[] {
 export const PEOPLE: Person[] = buildTenant();
 export const PERSON_BY_ID = new Map(PEOPLE.map((p) => [p.id, p]));
 
-const detailCache = new Map<string, PersonDetail>();
+const activityCache = new Map<string, Activity[]>();
 
-/** Timeline, exposure findings and access for one person. Built on demand, only the person page needs it. */
-export function personDetail(p: Person): PersonDetail {
-  const hit = detailCache.get(p.id);
+/** Timeline for one person. Built on demand, only the person page needs it. */
+export function personActivity(p: Person): Activity[] {
+  const hit = activityCache.get(p.id);
   if (hit) return hit;
   const r = rng(0x85ebca6b ^ Math.imul(Number(p.id.slice(1)), 40503));
   let seq = 0;
   const aid = () => `${p.id}-a${++seq}`;
-  const vip = p.tags.includes("VIP");
   const activity: Activity[] = p.sims.map((s) => ({
     id: s.id, type: "Simulation", title: s.template, source: SIM_SOURCE[s.channel], ageDays: s.ageDays, sim: s,
     detail: s.outcome === "Passed" ? (s.reported ? "Reported" : "No action") : s.reported ? `${s.outcome}, then reported` : s.outcome,
@@ -251,25 +242,9 @@ export function personDetail(p: Person): PersonDetail {
   activity.push({ id: aid(), type: "Announcement", title: "Acceptable use policy 2026", source: "Announcements", ageDays: 210, detail: r() < 0.85 ? "Acknowledged" : "Not acknowledged" });
   activity.push({ id: aid(), type: "Announcement", title: "Deepfake payment fraud alert", source: "Announcements", ageDays: 45, detail: r() < 0.8 ? "Acknowledged" : "Not acknowledged" });
   activity.sort((a, b) => a.ageDays - b.ageDays);
-
-  const v = (k: string) => p.readings[k]?.value ?? 0;
-  const osint: PersonDetail["osint"] = [];
-  if (v("exp-breach") > 55) osint.push({ item: "Work email in a public breach", severity: "High" });
-  if (v("exp-contact") > 50) osint.push({ item: "Mobile number listed publicly", severity: "Medium" });
-  if (v("exp-social") > 45) osint.push({ item: "Role and manager listed on social profile", severity: "Low" });
-  if (vip) osint.push({ item: "Named in press releases", severity: "Medium" });
-
-  const access: PersonDetail["access"] = [];
-  if (p.tags.includes("Privileged")) access.push({ item: p.department === "IT" ? "Domain admin on 3 systems" : "Admin on finance platform", level: "High" });
-  if (v("prv-fin") > 60) access.push({ item: "Payment approval authority", level: "High" });
-  if (v("prv-shared") > 50) access.push({ item: "Owner of 2 shared mailboxes", level: "Medium" });
-  if (vip) access.push({ item: "Board and leadership network", level: "Medium" });
-  if (!access.length) access.push({ item: "Standard user access", level: "Low" });
-
-  const d = { activity, osint, access };
-  if (detailCache.size > 200) detailCache.clear();
-  detailCache.set(p.id, d);
-  return d;
+  if (activityCache.size > 200) activityCache.clear();
+  activityCache.set(p.id, activity);
+  return activity;
 }
 
 export { LURES };
