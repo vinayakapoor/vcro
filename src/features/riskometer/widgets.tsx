@@ -19,7 +19,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, LURES, PREV_MONTH, clearRun, deptLures, dismissRun, fmt, formatStamp, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  DEPARTMENTS, LURES, PREV_MONTH, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -80,13 +80,13 @@ export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
 
       <div className="mt-5 border-t pt-4">
         <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>People by band</span><span className="tabular-nums">{fmt(s.scored)} scored</span></div>
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="space-y-1">
           {s.bands.map((b) => (
-            <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`${fmt(b.count)} people in ${b.band}`}
-              className="group rounded-lg border p-2 transition-colors hover:border-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <div className="flex h-9 items-end"><div className="w-full rounded-sm transition-opacity group-hover:opacity-80" style={{ height: `${Math.max(6, (b.count / max) * 100)}%`, background: BAND_VAR[b.band] }} /></div>
-              <div className="mt-1.5 truncate text-sm font-semibold tabular-nums">{fmt(b.count)}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{b.band}</div>
+            <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`See the ${fmt(b.count)} people in ${b.band}`}
+              className="-mx-1.5 grid grid-cols-[78px_1fr_auto] items-center gap-3 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: BAND_VAR[b.band] }} />{b.band}</span>
+              <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, minWidth: b.count ? 3 : 0, background: BAND_VAR[b.band] }} /></span>
+              <span className="w-24 text-right tabular-nums">{fmt(b.count)}<span className="ml-1.5 text-xs text-muted-foreground">{pct(s.scored ? b.count / s.scored : 0)}</span></span>
             </Link>
           ))}
         </div>
