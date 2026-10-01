@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
-import { ChevronDown, Pin, PinOff, Play, Plus, RotateCcw, X } from "lucide-react";
+import { ChevronDown, IdCard, Pin, PinOff, Play, Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
 import { PERSON_BY_ID, personActivity, type ActivityType, type Finding } from "@/data/people";
 import { TagList } from "@/features/shared/tags";
 import { BAND_VAR } from "@/features/shared/band";
-import { SOURCES, TAGS, accessFindings, customTagsByPerson, exposureFindings, missingSources, overrideTag } from "@/lib/api";
+import { SOURCES, TAGS, accessFindings, customTagsByPerson, exposureFindings, missingSources, overrideTag, scoreLedger } from "@/lib/api";
 import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 const SKILL_LEVELS = ["Starter", "Aware", "Capable", "Strong", "Champion"];
@@ -111,6 +111,7 @@ function PersonPage() {
   const missing = [!hasSims && "a simulation result", !ELEMENTS.some((e) => e.category === "Learning" && p.now[e.id]) && "a learning signal"].filter(Boolean).join(" and ");
   const next = p.score === null ? [] : nextSteps(signals, p);
   const exposure = exposureFindings(p), access = accessFindings(p);
+  const ledger = ready ? scoreLedger(signals, p) : {};
   const worst = [...p.channels].filter((c) => c.failures > 0).sort((a, b) => b.failRate - a.failRate)[0]?.channel;
   const first = privacy ? "This person" : p.name.split(" ")[0];
 
@@ -148,6 +149,7 @@ function PersonPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="outline"><Link to="/vcro/scorecard/$id" params={{ id: p.id }}><IdCard className="size-4" />Scorecard</Link></Button>
           <Button variant="outline" onClick={() => { togglePinned(p.id); toast(isPinned ? "Removed from Pinned by you" : "Added to the Pinned by you watchlist"); }} aria-pressed={isPinned}>
             {isPinned ? <><PinOff className="size-4" />Unpin</> : <><Pin className="size-4" />Pin to watchlist</>}
           </Button>
@@ -211,7 +213,7 @@ function PersonPage() {
                 ))}
               </div>
             )}
-            {p.skill !== null && skillLevel(p.skill) < 4 && <div className="mt-2 text-[11px] text-muted-foreground">{SKILL_CUTS[skillLevel(p.skill) + 1]! - p.skill} points to {SKILL_LEVELS[skillLevel(p.skill) + 1]}</div>}
+            {p.skill !== null && skillLevel(p.skill) < 4 && <div className="mt-2 text-[11px] text-muted-foreground">{SKILL_CUTS[skillLevel(p.skill) + 1]! - p.skill} {SKILL_CUTS[skillLevel(p.skill) + 1]! - p.skill === 1 ? "point" : "points"} to {SKILL_LEVELS[skillLevel(p.skill) + 1]}</div>}
           </div>
         </Widget>
 
@@ -307,7 +309,7 @@ function PersonPage() {
           </div>
         </Widget>
 
-        <Widget title="Activity" ready={ready} className="lg:col-span-12"
+        <Widget title="Activity" ready={ready} className="lg:col-span-12" info="Everything recorded for this person, newest first. Each simulation shows what it did to today's score: the score with that event against the score without it."
           action={
             <ToggleGroup type="single" size="sm" variant="outline" value={type} onValueChange={(v) => v && setType(v)} aria-label="Activity type" className="flex-wrap">
               {["All", ...TYPES].map((t) => <ToggleGroupItem key={t} value={t} className="px-2.5 text-xs">{t}</ToggleGroupItem>)}
@@ -322,7 +324,9 @@ function PersonPage() {
                   <span className="font-medium">{a.title}</span>
                   <SoftBadge>{a.type}</SoftBadge>
                   {a.sim && <><PayloadBadge payload={a.sim.payload} /><SoftBadge>Difficulty {a.sim.difficulty}</SoftBadge></>}
-                  <span className="ml-auto text-xs tabular-nums text-muted-foreground">{formatAge(a.ageDays)}</span>
+                  <span className="ml-auto flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
+                    {a.sim && ledger[a.sim.id] != null && ledger[a.sim.id] !== 0 && <span className={`rounded-md px-1.5 py-0.5 font-medium ${ledger[a.sim.id]! > 0 ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>{ledger[a.sim.id]! > 0 ? "+" : ""}{ledger[a.sim.id]!.toFixed(1)} pts on the score</span>}
+                    {formatAge(a.ageDays)}</span>
                 </div>
                 <div className="text-xs text-muted-foreground">{a.source} · {a.detail}</div>
               </li>

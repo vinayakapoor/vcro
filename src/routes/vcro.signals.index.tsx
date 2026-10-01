@@ -81,14 +81,28 @@ function SignalsPage() {
       <Tabs value={tab} onValueChange={(v) => navigate({ search: { tab: v as "modules" } })} className="min-w-0">
         <TabsList className="flex w-full justify-start overflow-x-auto sm:inline-flex sm:w-fit"><TabsTrigger value="modules">HumanFirewall modules</TabsTrigger><TabsTrigger value="integrations">Integrations</TabsTrigger><TabsTrigger value="signals">All signals</TabsTrigger></TabsList>
         <TabsContent value="modules" className="mt-4">
-          <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-            {SOURCES.filter((x) => x.kind === "Module").map((m) => (
-              <Card key={m.id} className="gap-2 p-4 shadow-none">
-                <div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold">{m.name}</span><StatusBadge on={s.connected.has(m.id)} /></div>
-                <div className="text-xs text-muted-foreground">{fmt(m.events30d)} events in 30 days · synced {m.lastSync}</div>
-                <div className="mt-1 flex flex-wrap gap-1">{ELEMENTS.filter((e) => e.sourceId === m.id).map((e) => <span key={e.id} className={`rounded-md border px-1.5 py-0.5 text-[11px] ${s.active.has(e.id) ? "bg-muted" : "border-dashed text-muted-foreground line-through"}`}>{e.name}</span>)}</div>
-              </Card>
-            ))}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {SOURCES.filter((x) => x.kind === "Module").map((m) => {
+              const els = ELEMENTS.filter((e) => e.sourceId === m.id);
+              const live = els.filter((e) => s.active.has(e.id));
+              const share = live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) * 100;
+              return (
+                <div key={m.id} className="flex flex-col rounded-2xl border bg-card p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-base font-semibold">{m.name}
+                      <InfoTip label={m.name} text={`Supplies: ${els.map((e) => e.name).join(", ")}.`} /></span>
+                    <StatusBadge on={s.connected.has(m.id)} onText="Live" />
+                  </div>
+                  <div className="mt-4 text-2xl font-bold tabular-nums tracking-tight">{fmt(m.events30d)}</div>
+                  <div className="text-xs text-muted-foreground">events in 30 days</div>
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3 text-xs">
+                    <span className="whitespace-nowrap text-muted-foreground">{live.length} {live.length === 1 ? "signal" : "signals"}</span>
+                    <span className="whitespace-nowrap font-semibold tabular-nums">{share.toFixed(1)}% of the score</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">Synced {m.lastSync}</div>
+                </div>
+              );
+            })}
           </div>
         </TabsContent>
 

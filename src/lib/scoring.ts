@@ -273,6 +273,11 @@ export function computeScore(
 
 /** Score only, for bulk history and what-if runs. */
 export function scoreOnly(elements: ElementDef[], readings: Readings, active: Set<string>, overrides: WeightOverrides = {}, cfg: ScoringConfig = DEFAULT_CONFIG): number | null {
+  const v = scoreExact(elements, readings, active, overrides, cfg);
+  return v === null ? null : Math.round(v);
+}
+/** The score before rounding, for showing what a single event did to it. */
+export function scoreExact(elements: ElementDef[], readings: Readings, active: Set<string>, overrides: WeightOverrides = {}, cfg: ScoringConfig = DEFAULT_CONFIG): number | null {
   const idx = indexOf(elements);
   if (!(hasAny(idx.simulations, readings, active) && hasAny(idx.learning, readings, active))) return null;
   const b = pillarScore("Behaviour", idx, readings, active, overrides, cfg.halfLifeDays).score;
@@ -282,5 +287,5 @@ export function scoreOnly(elements: ElementDef[], readings: Readings, active: Se
   for (const id of idx.reporting) { const r = readings[id]; if (r && active.has(id)) { repSum += r.value; repN++; } }
   const behaviour = Math.max(0, b - (repN ? (REPORTING_MAX_OFFSET * (repSum / repN)) / 100 : 0));
   const likelihood = LIKELIHOOD_WEIGHTS.Behaviour * behaviour + LIKELIHOOD_WEIGHTS.Exposure * x;
-  return Math.min(100, Math.round(likelihood * (IMPACT_RANGE[0] + (IMPACT_RANGE[1] - IMPACT_RANGE[0]) * (p / 100))));
+  return Math.min(100, likelihood * (IMPACT_RANGE[0] + (IMPACT_RANGE[1] - IMPACT_RANGE[0]) * (p / 100)));
 }

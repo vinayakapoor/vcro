@@ -49,7 +49,7 @@ export const SOURCES: Source[] = [
   { id: "int-browser", name: "Managed browser", kind: "Integration", category: "Browser", direction: "Signal in", about: "Risky extensions, data pasted into GenAI and password reuse, seen in managed browsers.", auth: "OAuth", vendors: ["Chrome Enterprise", "Microsoft Edge for Business", "Island"], defaultConnected: false, lastSync: "", events30d: 7300 },
   { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", direction: "Signal in", about: "Impersonation attempts aimed at the organisation and misdirected outbound email.", auth: "API key", vendors: ["Proofpoint", "Mimecast", "Microsoft Defender for Office 365", "Abnormal"], defaultConnected: false, lastSync: "", events30d: 16400 },
   { id: "int-collab", name: "Collaboration and chat", kind: "Integration", category: "Collaboration", direction: "Signal in", about: "Phishing clicked and reported in chat, and risky external sharing across workspaces.", auth: "OAuth", vendors: ["Microsoft Teams", "Slack", "Google Chat"], defaultConnected: false, lastSync: "", events30d: 3900 },
-  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, departments, joiners, movers, leavers and contractors.", auth: "SCIM and API key", vendors: ["Workday", "SAP SuccessFactors", "Oracle HCM", "Darwinbox", "BambooHR"], defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
+  { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, departments, joiners, movers, leavers and contractors.", auth: "SCIM and API key", vendors: ["Workday", "SAP SuccessFactors", "Oracle HCM", "Bayzat", "BambooHR"], defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
   { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "Breached credentials and what is public about the organisation and its people.", auth: "API key", vendors: ["Have I Been Pwned", "SpyCloud", "Recorded Future"], defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
   { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", direction: "Signal in", about: "The AI agents in use across the organisation, what they can reach and who has reviewed them.", auth: "OAuth", vendors: ["Microsoft Entra Agent ID", "Microsoft Copilot Studio", "Custom agent registry"], defaultConnected: false, lastSync: "", events30d: 880 },
   { id: "out-access", name: "Conditional access", kind: "Integration", category: "Identity", direction: "Action out", about: "Keep directory groups in step with the score, so your own access policies act on them.", auth: "OAuth", vendors: ["Microsoft Entra ID", "Okta"], defaultConnected: false, lastSync: "", events30d: 0,
@@ -229,12 +229,52 @@ export const DEPARTMENTS = [
 ] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
-export const LOCATIONS = ["Gurugram", "Mumbai", "Bengaluru", "Dubai", "Abu Dhabi"] as const;
+export const LOCATIONS = ["Dubai", "Abu Dhabi", "Riyadh", "Jeddah", "Doha"] as const;
 
 export const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct"];
 export const TODAY = new Date(Date.UTC(2026, 9, 1));
 
 export const TENANT = "Demo Enterprise";
+
+/** Peer figures for the tenant's benchmark group, refreshed monthly from organisations in the same sector and region. */
+export const BENCHMARK = {
+  group: "Banking and financial services, GCC",
+  organisations: 38,
+  asOf: "September 2026",
+  median: { score: 31, reportRate: 34, failRate: 24, completion: 63, highShare: 2.1 },
+  best: { score: 22, reportRate: 52, failRate: 14, completion: 82, highShare: 0.6 },
+};
+
+/** Awareness and human-risk controls in the frameworks customers in the region are audited against. */
+export type Evidence = "training" | "simulation" | "reporting" | "policy" | "privileged" | "measurement" | "joiners";
+export const FRAMEWORKS: { id: string; name: string; body: string; controls: { ref: string; title: string; evidence: Evidence[] }[] }[] = [
+  { id: "uae-ia", name: "UAE Information Assurance Regulation", body: "UAE Cybersecurity Council", controls: [
+    { ref: "M3.1", title: "Awareness and training policy", evidence: ["policy"] },
+    { ref: "M3.2", title: "Awareness and training programme", evidence: ["training", "simulation"] },
+    { ref: "M3.3", title: "Training needs", evidence: ["measurement", "privileged"] },
+    { ref: "M3.4", title: "Awareness campaigns", evidence: ["simulation", "reporting"] },
+  ] },
+  { id: "nca-ecc", name: "Saudi NCA Essential Cybersecurity Controls", body: "National Cybersecurity Authority", controls: [
+    { ref: "1-10-1", title: "Awareness programme defined and approved", evidence: ["policy"] },
+    { ref: "1-10-2", title: "Awareness programme implemented", evidence: ["training", "simulation"] },
+    { ref: "1-10-3", title: "Programme covers current threats, including phishing and social engineering", evidence: ["simulation", "reporting"] },
+    { ref: "1-10-4", title: "Specialised training for privileged and sensitive roles", evidence: ["privileged"] },
+    { ref: "1-10-5", title: "Programme reviewed periodically", evidence: ["measurement"] },
+  ] },
+  { id: "sama-csf", name: "SAMA Cyber Security Framework", body: "Saudi Central Bank", controls: [
+    { ref: "3.1.6", title: "Cyber security awareness", evidence: ["simulation", "reporting", "measurement"] },
+    { ref: "3.1.7", title: "Cyber security training", evidence: ["training", "privileged", "joiners"] },
+  ] },
+  { id: "iso-27001", name: "ISO/IEC 27001:2022", body: "ISO", controls: [
+    { ref: "A.6.3", title: "Information security awareness, education and training", evidence: ["training", "simulation", "measurement"] },
+    { ref: "A.6.8", title: "Information security event reporting", evidence: ["reporting"] },
+    { ref: "A.5.10", title: "Acceptable use of information and other associated assets", evidence: ["policy"] },
+  ] },
+  { id: "nist-csf", name: "NIST Cybersecurity Framework 2.0", body: "NIST", controls: [
+    { ref: "PR.AT-01", title: "Personnel are provided awareness and training", evidence: ["training", "simulation"] },
+    { ref: "PR.AT-02", title: "People in specialised roles are provided awareness and training", evidence: ["privileged"] },
+  ] },
+];
 export const TOTAL_EMPLOYEES = 5200;
 export const HEADCOUNT: Record<Department, number> = {
   Finance: 420, HR: 260, IT: 380, Engineering: 1150, Sales: 860, Operations: 720, Legal: 110,
@@ -246,9 +286,6 @@ export const INTERVENTIONS: { month: string; label: string }[] = [
   { month: "Jun", label: "QR campaign" },
   { month: "Aug", label: "Reporter Button rollout" },
 ];
-
-/** Industry benchmark (sample) range per month. */
-export const BENCHMARK: [number, number][] = MONTHS.map((_, i) => [36 - Math.round(i * 0.3), 50 - Math.round(i * 0.4)]);
 
 export const WORKFLOWS = [
   "Repeat clicker remediation",

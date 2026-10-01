@@ -5,10 +5,12 @@ import {
   DEPARTMENTS, ELEMENTS, HEADCOUNT, INTERVENTIONS, LOCATIONS, MONTHS, SIM_ELEMENT_CHANNEL, SOURCES, TEMPLATES,
   TODAY, WORKFLOWS, type Department,
 } from "@/data/catalogue";
+import { BENCHMARK, FRAMEWORKS, type Evidence } from "@/data/catalogue";
+export { BENCHMARK, FRAMEWORKS };
 import { DIRECTORY_GROUPS, PEOPLE, PERSON_BY_ID, TAGS, groupMembers, type Finding, type Person, type Tag } from "@/data/people";
 import {
   bandFor, CHANNELS, computeScore, confidenceFor, DEFAULT_CONFIG, elementWeights, failed, isImpulsive, LURES, rates, scoreOnly,
-  simulationRisk, skillScore, type Band, type Channel, type Lure, type Readings, type ScoreResult, type ScoringConfig, type SimEvent,
+  scoreExact, simulationRisk, skillScore, type Band, type Channel, type Lure, type Readings, type ScoreResult, type ScoringConfig, type SimEvent,
 } from "./scoring";
 
 // ---------- Store ----------
@@ -24,7 +26,18 @@ export type Settings = {
   privacy: boolean;
   /** Teams smaller than this show no score, so no one can be singled out through a small group. */
   minGroupSize: number;
+  /** Which roles can open vCRO, and how much each one sees. */
+  access: Record<RoleId, boolean>;
 };
+export type RoleId = "admin" | "analyst" | "deptHead" | "manager" | "auditor" | "employee";
+export const ROLES: { id: RoleId; name: string; sees: string; locked?: boolean }[] = [
+  { id: "admin", name: "Security admin", sees: "Everything, including settings, weights and integrations", locked: true },
+  { id: "analyst", name: "Security analyst", sees: "Every page and every person. Cannot change settings or weights" },
+  { id: "deptHead", name: "Department head", sees: "Their own department: scorecard, teams and people" },
+  { id: "manager", name: "People manager", sees: "Their own team scorecard. Individual scores only where the team is large enough" },
+  { id: "auditor", name: "Auditor", sees: "Reports and compliance evidence, with people pseudonymised" },
+  { id: "employee", name: "Employee", sees: "Only their own scorecard" },
+];
 export type WatchlistRule = { department?: string; location?: string; tag?: string; tags?: string[]; minBand?: "Guarded" | "Elevated" | "High" | "Critical"; rising?: boolean; repeatClicker?: boolean };
 export type SavedWatchlist = { id: string; name: string; rule: WatchlistRule };
 export type Run = { id: string; key: string; workflow: string; target: string; people: number; status: "Queued" | "Dismissed"; at: string };
@@ -48,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alerts: { enterHigh: true, orgRise: 5, weekly: true, recipients: "" },
   automation: { autoRun: true, approvalAbove: 250 },
   targetScore: null, privacy: false, minGroupSize: 5,
+  access: { admin: true, analyst: true, deptHead: true, manager: true, auditor: true, employee: false },
 };
 const DEFAULT_STORE: Store = {
   signals: makeSignals(new Set(SOURCES.filter((s) => s.defaultConnected).map((s) => s.id)), new Set(), {}, DEFAULT_CONFIG, NO_EDITS),
@@ -97,7 +111,7 @@ export function hydrateStore() {
         new Set((sg.connected as string[] | undefined)?.filter((x) => known.has(x)) ?? DEFAULT_STORE.signals.connected),
         new Set(sg.disabled ?? []), sg.weights ?? {}, { ...DEFAULT_CONFIG, ...sg.config }, { ...NO_EDITS, ...sg.edits },
       ),
-      settings: { ...DEFAULT_SETTINGS, ...d.settings, alerts: { ...DEFAULT_SETTINGS.alerts, ...d.settings?.alerts }, automation: { ...DEFAULT_SETTINGS.automation, ...d.settings?.automation } },
+      settings: { ...DEFAULT_SETTINGS, ...d.settings, alerts: { ...DEFAULT_SETTINGS.alerts, ...d.settings?.alerts }, automation: { ...DEFAULT_SETTINGS.automation, ...d.settings?.automation }, access: { ...DEFAULT_SETTINGS.access, ...d.settings?.access } },
       watchlists: d.watchlists ?? [], pinned: d.pinned ?? [], runs: d.runs ?? [], reports: d.reports ?? [], visited: d.visited ?? [], tags: d.tags ?? [], connectors: { ...DEFAULT_STORE.connectors, ...d.connectors },
     };
     listeners.forEach((l) => l());
@@ -565,6 +579,48 @@ export function nextSteps(s: SignalState, p: ScoredPerson) {
   if (p.tags.includes("VIP")) steps.push({ id: "vip", action: "Schedule VIP briefing", workflow: "VIP protection briefing", fix: STEP_FIX["vip"]! });
   return steps.map((st) => { const w = whatIf(s, p, st.fix); return { ...st, impact: w === null ? 0 : Math.max(0, p.score! - w) }; })
     .sort((a, b) => b.impact - a.impact).slice(0, 3);
+}
+
+// ---------- Score ledger ----------
+/** What each simulation did to this person's score: today's score against the score without that one event. */
+export function scoreLedger(s: SignalState, p: ScoredPerson): Record<string, number> {
+  return memo(s, `ledger:${p.id}`, () => {
+    const out: Record<string, number> = {};
+    if (p.score === null) return out;
+    const exact = (person: Person) => {
+      const all = readingsAt(person, 0, s.config);
+      const now: Readings = {};
+      for (const id of s.active) if (all[id]) now[id] = all[id];
+      return scoreExact(ELEMENTS, now, s.active, s.weights, s.config);
+    };
+    const base = exact(p);
+    if (base === null) return out;
+    for (const ev of p.sims) {
+      const w = exact({ ...p, sims: p.sims.filter((x) => x.id !== ev.id) });
+      if (w !== null) out[ev.id] = Math.round((base - w) * 10) / 10;
+    }
+    return out;
+  });
+}
+
+// ---------- Compliance evidence ----------
+/** Live evidence vCRO holds for each kind of control requirement. */
+export function evidenceFor(s: SignalState): Record<Evidence, { label: string; value: string; met: boolean; needs?: string }> {
+  const o = orgSummary(s), t = awarenessTotals(s), people = getPeople(s);
+  const priv = people.filter((p) => p.tags.includes("Privileged") || p.tags.includes("VIP") || p.tags.includes("Financial authority"));
+  const privDone = priv.filter((p) => (p.now["lrn-complete"]?.value ?? 100) < 50).length;
+  const joiners = people.filter((p) => p.tags.includes("Joiner or mover"));
+  const joinDone = joiners.filter((p) => (p.now["lrn-complete"]?.value ?? 100) < 50).length;
+  const share = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+  return {
+    training: { label: "Training completion", value: `${t.completion}% complete · ${fmt(t.overdue)} people overdue`, met: s.active.has("lrn-complete") },
+    simulation: { label: "Simulated attacks", value: `${fmt(o.simEvents)} simulations across 5 channels in 12 months · ${pct(o.failRate)} failed`, met: o.simsLive },
+    reporting: { label: "Threat reporting", value: `${pct(o.reportRate)} of simulations reported`, met: s.active.has("rep-sim") },
+    policy: { label: "Policy acknowledgement", value: `${t.policy}% of people acknowledged the current policies`, met: s.active.has("cul-policy") },
+    privileged: { label: "Privileged and sensitive roles", value: `${fmt(priv.length)} people identified · ${share(privDone, priv.length)}% trained`, met: s.connected.has("int-identity"), needs: "int-identity" },
+    measurement: { label: "Measurement and review", value: `Organisation score ${o.score}, ${o.change === 0 ? "unchanged" : `${o.change > 0 ? "up" : "down"} ${Math.abs(o.change)}`} since ${PREV_MONTH} · monthly trend kept for 12 months`, met: true },
+    joiners: { label: "Joiners and movers", value: `${fmt(joiners.length)} in the last 90 days · ${share(joinDone, joiners.length)}% trained`, met: s.connected.has("int-hr"), needs: "int-hr" },
+  };
 }
 
 // ---------- Person findings ----------

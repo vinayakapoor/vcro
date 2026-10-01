@@ -9,7 +9,7 @@ import { PageHeader, Widget } from "@/features/shared/widget";
 import { useReady } from "@/features/shared/prefs";
 import { InfoTip } from "@/features/shared/info";
 import {
-  DEFAULT_SETTINGS, applyState, orgScoreFor, previewConfig, resetVcro, saveSettings, signalStats, useSettings, useSignals,
+  DEFAULT_SETTINGS, ROLES, applyState, orgScoreFor, previewConfig, resetVcro, saveSettings, signalStats, useSettings, useSignals,
   type Settings,
 } from "@/lib/api";
 import { DEFAULT_CONFIG, type ScoringConfig } from "@/lib/scoring";
@@ -130,6 +130,17 @@ function SettingsPage() {
             <Num label="Smallest team size" v={set.minGroupSize} set={(n) => setSet({ ...set, minGroupSize: n ?? 0 })} suffix="people" max={50} />
           </Row>
         </div>
+      </Widget>
+
+      <Widget title="Access" ready={ready} info="Who can open vCRO and how much each role sees. Roles are assigned in the platform's user settings; this decides what each role can see here.">
+        <div className="divide-y">
+          {ROLES.map((r) => (
+            <Row key={r.id} label={r.name} hint={r.sees}>
+              <Switch checked={set.access[r.id]} disabled={r.locked} onCheckedChange={(v) => setSet({ ...set, access: { ...set.access, [r.id]: v } })} aria-label={`${r.name} can open vCRO`} />
+            </Row>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">To see what a manager or an employee sees, open any person and choose Scorecard.</p>
       </Widget>
 
       <Widget title="People and groups" ready={ready}>

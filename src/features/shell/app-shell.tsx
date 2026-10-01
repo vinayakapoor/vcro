@@ -51,9 +51,9 @@ function useCrumbs(path: string): string[] {
   const { privacy } = usePrefs();
   const parts = path.split("/").filter(Boolean);
   if (parts[0] !== "vcro") return ["Dashboard", PLATFORM_PAGES[parts[0] ?? "home"] ?? "Home"];
-  const label = VCRO_ORDER.find((v) => v.to === `/vcro/${parts[1]}`)?.label ?? "Riskometer";
+  const label = VCRO_ORDER.find((v) => v.to === `/vcro/${parts[1]}`)?.label ?? (parts[1] === "scorecard" ? "People" : "Riskometer");
   const out = ["Dashboard", "vCRO", label];
-  if (parts[1] === "people" && parts[2]) {
+  if ((parts[1] === "people" || parts[1] === "scorecard") && parts[2]) {
     const p = PERSON_BY_ID.get(parts[2]);
     if (p) out.push(privacy ? pseudonym(p.id) : p.name);
   }

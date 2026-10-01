@@ -88,6 +88,7 @@ function TeamPanel({ department }: { department: Department }) {
         <span className="tabular-nums">{shown.length ? `${p * TEAM_PAGE + 1} to ${Math.min(shown.length, (p + 1) * TEAM_PAGE)} of ${fmt(shown.length)} teams` : "0 teams"}</span>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" className="h-7 bg-card" onClick={() => navigate({ to: "/vcro/people", search: { dept: department, level: "Manager" } })}>See all managers</Button>
+          {shown[p * TEAM_PAGE] && <Button variant="outline" size="sm" className="h-7 bg-card" onClick={() => navigate({ to: "/vcro/scorecard/$id", params: { id: shown[p * TEAM_PAGE]!.managerId }, search: { view: "team" } })}>Riskiest team's scorecard</Button>}
           <Button variant="outline" size="icon" className="size-7 bg-card" aria-label="Previous teams" disabled={p === 0} onClick={() => setPage(p - 1)}><ChevronLeft className="size-4" /></Button>
           <span className="px-1 tabular-nums">Page {p + 1} of {pages}</span>
           <Button variant="outline" size="icon" className="size-7 bg-card" aria-label="Next teams" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}><ChevronRight className="size-4" /></Button>

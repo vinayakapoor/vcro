@@ -21,6 +21,7 @@ import { Route as VcroWatchlistsRouteImport } from './routes/vcro.watchlists'
 import { Route as VcroWeightageRouteImport } from './routes/vcro.weightage'
 import { Route as VcroPeopleIndexRouteImport } from './routes/vcro.people.index'
 import { Route as VcroPeopleIdRouteImport } from './routes/vcro.people.$id'
+import { Route as VcroScorecardIdRouteImport } from './routes/vcro.scorecard.$id'
 import { Route as VcroSignalsIndexRouteImport } from './routes/vcro.signals.index'
 import { Route as VcroSignalsIdRouteImport } from './routes/vcro.signals.$id'
 
@@ -84,6 +85,11 @@ const VcroPeopleIdRoute = VcroPeopleIdRouteImport.update({
   path: '/vcro/people/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VcroScorecardIdRoute = VcroScorecardIdRouteImport.update({
+  id: '/vcro/scorecard/$id',
+  path: '/vcro/scorecard/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VcroSignalsIndexRoute = VcroSignalsIndexRouteImport.update({
   id: '/vcro/signals/',
   path: '/vcro/signals/',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/scorecard/$id': typeof VcroScorecardIdRoute
   '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people/': typeof VcroPeopleIndexRoute
   '/vcro/signals/': typeof VcroSignalsIndexRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/scorecard/$id': typeof VcroScorecardIdRoute
   '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people': typeof VcroPeopleIndexRoute
   '/vcro/signals': typeof VcroSignalsIndexRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/vcro/watchlists': typeof VcroWatchlistsRoute
   '/vcro/weightage': typeof VcroWeightageRoute
   '/vcro/people/$id': typeof VcroPeopleIdRoute
+  '/vcro/scorecard/$id': typeof VcroScorecardIdRoute
   '/vcro/signals/$id': typeof VcroSignalsIdRoute
   '/vcro/people/': typeof VcroPeopleIndexRoute
   '/vcro/signals/': typeof VcroSignalsIndexRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/scorecard/$id'
     | '/vcro/signals/$id'
     | '/vcro/people/'
     | '/vcro/signals/'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/scorecard/$id'
     | '/vcro/signals/$id'
     | '/vcro/people'
     | '/vcro/signals'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/vcro/watchlists'
     | '/vcro/weightage'
     | '/vcro/people/$id'
+    | '/vcro/scorecard/$id'
     | '/vcro/signals/$id'
     | '/vcro/people/'
     | '/vcro/signals/'
@@ -207,6 +219,7 @@ export interface RootRouteChildren {
   VcroWatchlistsRoute: typeof VcroWatchlistsRoute
   VcroWeightageRoute: typeof VcroWeightageRoute
   VcroPeopleIdRoute: typeof VcroPeopleIdRoute
+  VcroScorecardIdRoute: typeof VcroScorecardIdRoute
   VcroSignalsIdRoute: typeof VcroSignalsIdRoute
   VcroPeopleIndexRoute: typeof VcroPeopleIndexRoute
   VcroSignalsIndexRoute: typeof VcroSignalsIndexRoute
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VcroPeopleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vcro/scorecard/$id': {
+      id: '/vcro/scorecard/$id'
+      path: '/vcro/scorecard/$id'
+      fullPath: '/vcro/scorecard/$id'
+      preLoaderRoute: typeof VcroScorecardIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vcro/signals/': {
       id: '/vcro/signals/'
       path: '/vcro/signals'
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   VcroWatchlistsRoute: VcroWatchlistsRoute,
   VcroWeightageRoute: VcroWeightageRoute,
   VcroPeopleIdRoute: VcroPeopleIdRoute,
+  VcroScorecardIdRoute: VcroScorecardIdRoute,
   VcroSignalsIdRoute: VcroSignalsIdRoute,
   VcroPeopleIndexRoute: VcroPeopleIndexRoute,
   VcroSignalsIndexRoute: VcroSignalsIndexRoute,

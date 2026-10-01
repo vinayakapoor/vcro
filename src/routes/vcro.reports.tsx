@@ -16,16 +16,18 @@ import { DataTable, type Column } from "@/features/shared/data-table";
 import { PeopleTable } from "@/features/people/people-table";
 import { useReady } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, ELEMENTS, MONTHS, PREV_MONTH, SOURCES, addReport, awarenessByDept, awarenessTotals, signalStats, axisFor, deptStats, fmt, formatStamp, getPeople, orgSummary, pct, removeReport,
+  BENCHMARK, DEPARTMENTS, ELEMENTS, FRAMEWORKS, MONTHS, PREV_MONTH, SOURCES, evidenceFor, addReport, awarenessByDept, awarenessTotals, signalStats, axisFor, deptStats, fmt, formatStamp, getPeople, orgSummary, pct, removeReport,
   scoreHistogram, signalCoverage, simsByDept, trends, useConnectors, useReports, useSettings, useSignals,
 } from "@/lib/api";
 import { buildReport, type TemplateId } from "@/lib/reports";
-import { download } from "@/lib/export";
+import { download, fileDate, toCsv } from "@/lib/export";
+import { Link } from "@tanstack/react-router";
+import { CheckCircle2, CircleDashed } from "lucide-react";
 import { bandFor } from "@/lib/scoring";
 
-const TABS = ["overview", "departments", "people", "simulations", "training", "signals", "downloads"] as const;
+const TABS = ["overview", "departments", "people", "simulations", "training", "signals", "compliance", "downloads"] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABEL: Record<Tab, string> = { overview: "Risk overview", departments: "Departments", people: "People", simulations: "Simulations", training: "Training and awareness", signals: "Signal coverage", downloads: "Downloads" };
+const TAB_LABEL: Record<Tab, string> = { overview: "Risk overview", departments: "Departments", people: "People", simulations: "Simulations", training: "Training and awareness", signals: "Signal coverage", compliance: "Compliance", downloads: "Downloads" };
 
 export const Route = createFileRoute("/vcro/reports")({
   validateSearch: (s) => z.object({ tab: z.enum(TABS).optional() }).parse(s),
@@ -166,6 +168,20 @@ function ReportsPage() {
   ];
   const cov = signalCoverage(sig);
   const hist = scoreHistogram(sig);
+  const [fw, setFw] = useState(FRAMEWORKS[0]!.id);
+  const framework = FRAMEWORKS.find((f) => f.id === fw)!;
+  const ev = evidenceFor(sig);
+  const covered = framework.controls.filter((c) => c.evidence.every((e) => ev[e].met)).length;
+  const exportEvidence = () => download(`vcro-evidence-${framework.id}-${fileDate()}.csv`, "text/csv", toCsv([
+    ["Framework", "Control", "Requirement", "Evidence", "Current figure", "Status"],
+    ...framework.controls.flatMap((c) => c.evidence.map((e) => [framework.name, c.ref, c.title, ev[e].label, ev[e].value, ev[e].met ? "Evidence available" : "Source not connected"])),
+  ]));
+  const peer = [
+    { k: "Risk score", you: s.score, median: BENCHMARK.median.score, best: BENCHMARK.best.score, lower: true, unit: "" },
+    { k: "Report rate", you: Math.round(s.reportRate * 100), median: BENCHMARK.median.reportRate, best: BENCHMARK.best.reportRate, lower: false, unit: "%" },
+    { k: "Simulations failed", you: Math.round(s.failRate * 100), median: BENCHMARK.median.failRate, best: BENCHMARK.best.failRate, lower: true, unit: "%" },
+    { k: "Training complete", you: totals.completion, median: BENCHMARK.median.completion, best: BENCHMARK.best.completion, lower: false, unit: "%" },
+  ];
   const highByDept = depts.map((d) => ({ department: d.department, high: d.high })).sort((a, b) => b.high - a.high);
 
   return (
@@ -225,6 +241,29 @@ function ReportsPage() {
               </BarChart></Chart>
             </Widget>
           </div>
+          <Widget title="Against your peers" ready={ready} info={`Your figures against ${BENCHMARK.organisations} organisations in ${BENCHMARK.group}, as of ${BENCHMARK.asOf}. Median is the middle organisation; best quarter is the level the top 25% reach.`}
+            action={<span className="text-xs text-muted-foreground">{BENCHMARK.group}</span>}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 pr-4 font-medium">Measure</th><th className="py-2 pr-4 text-right font-medium">You</th><th className="py-2 pr-4 text-right font-medium">Peer median</th><th className="py-2 pr-4 text-right font-medium">Best quarter</th><th className="py-2 font-medium">Where you stand</th></tr></thead>
+                <tbody>
+                  {peer.map((r) => {
+                    const ahead = r.lower ? r.you <= r.median : r.you >= r.median;
+                    const top = r.lower ? r.you <= r.best : r.you >= r.best;
+                    return (
+                      <tr key={r.k} className="border-b last:border-0">
+                        <td className="py-3 pr-4 font-medium">{r.k}</td>
+                        <td className="py-3 pr-4 text-right text-base font-bold tabular-nums">{r.you}{r.unit}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-muted-foreground">{r.median}{r.unit}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-muted-foreground">{r.best}{r.unit}</td>
+                        <td className="py-3"><span className={`rounded-md px-2 py-0.5 text-xs font-medium ${top ? "bg-success/10 text-success" : ahead ? "bg-muted" : "bg-warning/10 text-warning"}`}>{top ? "In the best quarter" : ahead ? "Better than the median" : "Behind the median"}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Widget>
           <Card className="p-5 shadow-none">{ready ? <DataTable rows={[...monthRows].reverse()} columns={monthCols} getId={(r) => r.month} pageSizeDefault={25}
             exportAs={{ name: "vcro-risk-overview", header: ["Month", "Score", "Change", ...BANDS, "Campaign"], row: (r) => [r.month, r.score, r.change, ...BANDS.map((b) => r[b]), r.campaign] }} /> : <Skeleton className="h-72 w-full" />}</Card>
         </TabsContent>
@@ -370,6 +409,45 @@ function ReportsPage() {
           <Card className="p-5 shadow-none">{ready ? <DataTable rows={sources} columns={srcCols} getId={(x) => x.id} pageSizeDefault={25} search={(x) => `${x.name} ${x.product}`} searchPlaceholder="Search sources or products"
             filters={[{ id: "status", label: "Status", options: ["Connected", "Not connected"], match: (x, v) => (v === "Connected") === x.on }]}
             exportAs={{ name: "vcro-signal-coverage", header: ["Source", "Product", "Type", "Status", "Signals live", "Signals total", "Events in 30 days", "Last sync"], row: (x) => [x.name, x.product, x.kind, x.on ? "Connected" : "Not connected", x.live, x.signals, x.on ? x.events30d : 0, x.synced] }} /> : <Skeleton className="h-72 w-full" />}</Card>
+        </TabsContent>
+
+        <TabsContent value="compliance" className="mt-5 space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            {FRAMEWORKS.map((f) => (
+              <button key={f.id} type="button" aria-pressed={f.id === fw} onClick={() => setFw(f.id)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${f.id === fw ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-muted"}`}>{f.name}</button>
+            ))}
+          </div>
+          <Kpis ready={ready} items={[
+            ["Policy acknowledged", `${totals.policy}%`, "Of people sent a policy"],
+            ["Controls with evidence", `${covered} of ${framework.controls.length}`, "Awareness and human-risk controls"],
+            ["Training complete", `${totals.completion}%`, `${fmt(totals.overdue)} people overdue`],
+            ["Simulations reported", pct(s.reportRate), `${fmt(s.simEvents)} sent in 12 months`],
+          ]} />
+          <Widget title={`${framework.name}, ${framework.body}`} ready={ready} info="The awareness and human-risk controls in this framework. Each control is matched to the evidence vCRO holds today. Figures are live. Export gives your auditor the same table with the date."
+            action={<Button variant="outline" size="sm" onClick={exportEvidence}><Download className="size-4" />Export evidence</Button>}>
+            <div className="divide-y">
+              {framework.controls.map((c) => {
+                const ok = c.evidence.every((e) => ev[e].met);
+                return (
+                  <div key={c.ref} className="grid gap-x-6 gap-y-2 py-4 md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+                    <div>
+                      <div className="flex items-center gap-2"><span className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold">{c.ref}</span>{ok ? <span className="inline-flex items-center gap-1 text-xs font-medium text-success"><CheckCircle2 className="size-3.5" />Evidence available</span> : <span className="inline-flex items-center gap-1 text-xs font-medium text-warning"><CircleDashed className="size-3.5" />Partly evidenced</span>}</div>
+                      <div className="mt-1.5 text-sm font-medium">{c.title}</div>
+                    </div>
+                    <ul className="space-y-1.5 text-sm">
+                      {c.evidence.map((e) => (
+                        <li key={e} className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-muted-foreground">{ev[e].label}:</span>
+                          {ev[e].met ? <span>{ev[e].value}</span> : <Link to="/vcro/signals/$id" params={{ id: ev[e].needs! }} className="font-medium underline underline-offset-2">Connect the source to evidence this</Link>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </Widget>
         </TabsContent>
 
         <TabsContent value="downloads" className="mt-5">
