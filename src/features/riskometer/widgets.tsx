@@ -20,7 +20,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, LURES, PREV_MONTH, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  DEPARTMENTS, LURES, PREV_MONTH, signalStats, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -415,7 +415,7 @@ export function ConcentrationCard({ s, ready }: { s: Summary; ready: boolean }) 
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <Button asChild variant="outline" size="sm" className="mt-3 self-start"><Link to="/vcro/watchlists" search={{ group: "top-risk" }}><Users className="size-4" />Open the top 10% watchlist</Link></Button>
+      <Button asChild variant="outline" size="sm" className="mt-3 self-start"><Link to="/vcro/watchlists" search={{ group: "top-risk" }}><Users className="size-4" />Open these people</Link></Button>
     </Widget>
   );
 }
@@ -458,7 +458,6 @@ export function ActionsCard({ ready }: { ready: boolean }) {
 
 const TILE_INFO: Record<string, string> = {
   Behaviour: "What people do: simulation results, real incidents, training, security hygiene and culture.",
-  Attitude: "How people feel about security. Three check-in questions sent through Feedback, each answered on a five-point scale: confidence spotting scams, willingness to report, and time pressure. Part of Behaviour.",
   Exposure: "How targeted and visible people are: attack volume, breached credentials, public footprint and role.",
   Privilege: "What people can reach: admin rights, critical systems, payment authority and sensitive data.",
   Reporting: "How people report threats. This is a credit: more and faster reporting takes points off the score.",
@@ -467,12 +466,12 @@ const TILE_INFO: Record<string, string> = {
 
 export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage> }) {
   const sig = useSignals();
-  const live = cov.sources.filter((x) => x.on);
+  const st = signalStats(sig);
   const next = ready ? bestNextSources(sig) : [];
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
       action={<Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>}>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {cov.pillars.map((p) => (
           <div key={p.pillar} className="rounded-xl border p-4">
             <div className="flex items-center justify-between gap-2">
@@ -489,8 +488,8 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
       </div>
 
       <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 border-t pt-4 text-sm">
-        <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{live.length} of {cov.sources.length} sources connected</span> · {fmt(cov.events30d)} events in 30 days</span>
-        {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all {next.length} you can add</Link>}
+        <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{st.inbound.on} of {st.inbound.total} integrations connected</span> · plus {st.modules.total} HumanFirewall modules · {fmt(cov.events30d)} events in 30 days</span>
+        {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all {next.length} you can connect</Link>}
       </div>
       {next.length > 0 ? (
         <ul className="mt-3 grid gap-3 md:grid-cols-3">

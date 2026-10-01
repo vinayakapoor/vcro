@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 /** Plain-language explanations shown behind every (i) button, keyed by card or panel title. */
 export const GLOSSARY: Record<string, string> = {
-  "Riskometer": "The organisation's human risk score from 0 to 100. Higher means riskier. It blends Behaviour, Attitude, Exposure, Privilege and Reporting signals. The outer band shows the likely range given how much data is connected.",
+  "Riskometer": "The organisation's human risk score from 0 to 100. Higher means riskier. It blends Behaviour, Exposure, Privilege and Reporting signals. The outer band shows the likely range given how much data is connected.",
   "Confidence": "How much of the scoring model is fed by connected sources. 100% means every signal is live. Low confidence means the score could move once more sources connect.",
   "Score confidence": "How much of the scoring model is fed by connected sources. 100% means every signal is live.",
   "Avg confidence": "Average share of the scoring model fed by connected sources, per person.",
@@ -40,7 +40,7 @@ export const GLOSSARY: Record<string, string> = {
   "Personal skill score": "A 0 to 100 skill score for this person, higher is better. Built from their behaviour, reporting and training knowledge.",
   "Why this score": "The score is what a person does plus how exposed they are, less a credit for reporting threats, multiplied by what they can reach. The bars show which parts add the most points.",
   "Lure profile": "Which persuasion tricks this person falls for most in simulations.",
-  "Connected sources": "Modules and integrations sending data to vCRO.",
+  "Integrations connected": "Tools from your security stack linked to vCRO. Some feed the score, some act on it. The HumanFirewall modules are always on and are counted separately.",
   "Active elements": "Signals currently counted in the score. Turn them on or off on the Signals page.",
   "Department scorecard": "Score, change, top driver and awareness measures per department.",
   "Score over time": "Average score per month for the organisation, your filtered selection and up to 5 departments. Drag the handles under the chart to zoom into a period.",

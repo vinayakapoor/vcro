@@ -27,9 +27,9 @@ export const Route = createFileRoute("/vcro/weightage")({
 
 const PRESETS = {
   Default: {} as Record<string, number>,
-  "Behaviour first": { Simulations: 45, "Real-world incidents": 45, Learning: 10, Culture: 5, Attitude: 5 },
+  "Behaviour first": { Simulations: 45, "Real-world incidents": 45, Learning: 10, Culture: 5 },
   "Incidents first": { Simulations: 20, "Real-world incidents": 50, "Access and admin": 45 },
-  "Training first": { Learning: 35, Culture: 20, Attitude: 15 },
+  "Training first": { Learning: 35, Culture: 20 },
 };
 const PILLARS = Object.keys(PILLAR_SHARE) as Pillar[];
 function WeightagePage() {

@@ -72,8 +72,8 @@ function SignalsPage() {
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader title="Signals" subtitle="What feeds the risk score, and where the score is put to work" action={<Button onClick={() => navigate({ search: { tab: "integrations" } })}><Plus className="size-4" />Add source</Button>} />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard ready={ready} label="Connected sources" icon={Plug} value={`${st.connectedSources} / ${st.totalSources}`} caption={`Feeding the score · ${st.outbound} acting on it`} />
-        <StatCard ready={ready} label="Active signals" icon={Activity} value={`${st.active} / ${st.total}`} caption="Counted in the score" />
+        <StatCard ready={ready} label="Integrations connected" icon={Plug} value={`${st.integrations.on} / ${st.integrations.total}`} caption={`${st.inbound.on} of ${st.inbound.total} feeding the score · ${st.outbound.on} of ${st.outbound.total} acting on it`} />
+        <StatCard ready={ready} label="Active signals" icon={Activity} value={`${st.active} / ${st.total}`} caption={`From ${st.modules.total} modules and ${st.inbound.on} integrations`} />
         <StatCard ready={ready} label="Score confidence" icon={Gauge} value={`${st.confidence}%`} caption="Share of the model with live data" />
         <StatCard ready={ready} label="Last sync" icon={Clock} value={st.lastSync} caption="Most recent source" />
       </div>

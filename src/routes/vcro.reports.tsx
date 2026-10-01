@@ -16,7 +16,7 @@ import { DataTable, type Column } from "@/features/shared/data-table";
 import { PeopleTable } from "@/features/people/people-table";
 import { useReady } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, ELEMENTS, MONTHS, PREV_MONTH, SOURCES, addReport, awarenessByDept, axisFor, deptStats, fmt, formatStamp, getPeople, orgSummary, pct, removeReport,
+  DEPARTMENTS, ELEMENTS, MONTHS, PREV_MONTH, SOURCES, addReport, awarenessByDept, awarenessTotals, signalStats, axisFor, deptStats, fmt, formatStamp, getPeople, orgSummary, pct, removeReport,
   scoreHistogram, signalCoverage, simsByDept, trends, useConnectors, useReports, useSettings, useSignals,
 } from "@/lib/api";
 import { buildReport, type TemplateId } from "@/lib/reports";
@@ -139,6 +139,8 @@ function ReportsPage() {
     { id: "impulsive", header: "Impulsive clickers", cell: (d) => <span className="tabular-nums">{fmt(d.impulsive)}</span>, sort: (d) => d.impulsive },
   ];
   const train = awarenessByDept(sig);
+  const totals = awarenessTotals(sig);
+  const st = signalStats(sig);
   type Train = (typeof train)[number];
   const trainCols: Column<Train>[] = [
     { id: "department", header: "Department", cell: (d) => <span className="font-medium">{d.department}</span>, sort: (d) => d.department },
@@ -329,10 +331,10 @@ function ReportsPage() {
 
         <TabsContent value="training" className="mt-5 space-y-5">
           <Kpis ready={ready} items={[
-            ["Training complete", `${Math.round(train.reduce((a, d) => a + d.completion * d.people, 0) / s.total)}%`, "Of people, weighted by department size"],
-            ["People overdue", fmt(train.reduce((a, d) => a + d.overdue, 0)), "Oldest course 60 days or more late"],
-            ["JIT nudges opened", `${Math.round(train.reduce((a, d) => a + d.jit * d.people, 0) / s.total)}%`, "Within 7 days"],
-            ["Policy acknowledged", `${Math.round(train.reduce((a, d) => a + d.policy * d.people, 0) / s.total)}%`, "Of published policies"],
+            ["Training complete", `${totals.completion}%`, "Of people with assigned training"],
+            ["People overdue", fmt(totals.overdue), "Oldest course 60 days or more late"],
+            ["JIT nudges opened", `${totals.jit}%`, "Within 7 days"],
+            ["Policy acknowledged", `${totals.policy}%`, "Of people sent a policy"],
           ]} />
           <Widget title="Completion and acknowledgement by department" ready={ready}>
             <Chart><BarChart data={[...train].sort((a, b) => a.completion - b.completion)} margin={{ top: 16, right: 12, left: -12, bottom: 0 }} barGap={4} barCategoryGap="24%">
@@ -352,7 +354,7 @@ function ReportsPage() {
         <TabsContent value="signals" className="mt-5 space-y-5">
           <Kpis ready={ready} items={[
             ["Confidence", `${s.confidence}%`, "Share of the model with live data"],
-            ["Sources connected", `${sources.filter((x) => x.on).length} of ${sources.length}`, "Modules and integrations"],
+            ["Integrations connected", `${st.inbound.on} of ${st.inbound.total}`, `Feeding the score, plus ${st.modules.total} modules`],
             ["Signals in the score", `${s.activeCount} of ${s.totalElements}`, "Connected and switched on"],
             ["Events in 30 days", fmt(cov.events30d), "From connected sources"],
           ]} />

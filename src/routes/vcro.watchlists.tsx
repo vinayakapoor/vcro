@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
-import { Eye, LayoutGrid, List, Plus, Tags, Trash2, UserRoundX, Users, X } from "lucide-react";
+import { Eye, Plus, Search, Tags, Trash2, UserRoundX, Users, X } from "lucide-react";
+import { InfoTip } from "@/features/shared/info";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,13 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageHeader, StatCard } from "@/features/shared/widget";
-import { usePrefs, useReady } from "@/features/shared/prefs";
+import { useReady } from "@/features/shared/prefs";
 import { BAND_VAR, BandBadge, DeltaBadge, tagIcon } from "@/features/shared/band";
 import { PeopleTable } from "@/features/people/people-table";
 import {
-  DIRECTORY_GROUPS, TAGS, addWatchlist, clearPinned, countRule, createTag, customTagsByPerson, deleteTag, describeRule, fmt, getPeople, groupMembers, initials, mapGroupToTag,
+  DIRECTORY_GROUPS, TAGS, addWatchlist, clearPinned, countRule, createTag, customTagsByPerson, deleteTag, describeRule, fmt, getPeople, groupMembers, mapGroupToTag,
   removeWatchlist, setTagGroups, unmapGroup, useCustomTags, usePinned, useSavedWatchlists, useSignals, watchlistSummary, type GroupKind, type WatchlistRule,
 } from "@/lib/api";
 import { DEPARTMENTS, LOCATIONS } from "@/data/catalogue";
@@ -44,12 +44,11 @@ const SECTIONS: { kind: GroupKind; title: string; hint: string }[] = [
 
 function WatchlistsPage() {
   const ready = useReady();
-  const { privacy } = usePrefs();
   const sig = useSignals();
   const tags = useCustomTags();
   const lists = watchlistSummary(sig, useSavedWatchlists(), usePinned(), tags);
   const { group } = Route.useSearch();
-  const [view, setView] = useState("cards");
+  const [find, setFind] = useState("");
   const sel = lists.find((l) => l.id === group && !l.needs) ?? lists[0]!;
   const watched = new Map(lists.filter((l) => l.kind !== "who" || l.id === "very-attacked-vips").flatMap((l) => l.members.map((m) => [m.id, m] as const)));
   const highWatched = [...watched.values()].filter((m) => m.band === "High" || m.band === "Critical").length;
@@ -69,86 +68,60 @@ function WatchlistsPage() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard ready={ready} label="People on a watchlist" icon={Eye} value={fmt(watched.size)} caption="On at least one behaviour list or your own" />
         <StatCard ready={ready} label="High or Critical watched" icon={UserRoundX} value={fmt(highWatched)} caption="Of the people on a watchlist" />
-        <StatCard ready={ready} label="Groups" icon={Users} value={lists.length} caption={`${lists.filter((l) => l.kind === "who").length} by tag · ${lists.filter((l) => l.kind === "behaviour").length} by behaviour`} />
+        <StatCard ready={ready} label="Groups" icon={Users} value={lists.length} caption={`${lists.filter((l) => l.kind === "who").length} by tag · ${lists.filter((l) => l.kind === "behaviour").length} by behaviour · ${own.length} yours`} />
         <StatCard ready={ready} label="Your own" icon={Tags} value={own.length} caption={own.length ? `${tags.length} tags · ${own.length - tags.length} lists` : "Create a watchlist or a tag"} />
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">Select a group to see its people below.</span>
-        <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setView(v)} aria-label="View">
-          <ToggleGroupItem value="cards"><LayoutGrid className="size-4" />Cards</ToggleGroupItem>
-          <ToggleGroupItem value="table"><List className="size-4" />Table</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
-      {view === "cards" ? SECTIONS.map((sec) => {
-        const items = lists.filter((l) => l.kind === sec.kind);
-        return (
-          <section key={sec.kind}>
-            <div className="mb-2"><h2 className="text-sm font-semibold">{sec.title} <span className="font-normal text-muted-foreground">· {items.length}</span></h2><p className="text-xs text-muted-foreground">{sec.hint}</p></div>
-            {!items.length ? <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Nothing here yet. Use Create watchlist or Manage tags above.</div> : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {items.map((l) => l.needs ? (
-                  <Link key={l.id} to="/vcro/signals/$id" params={{ id: l.needs.sourceId }}
-                    className="group flex flex-col rounded-xl border border-dashed p-4 transition hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <div className="flex items-center gap-2 text-sm font-semibold"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(l.name)}</span>{l.name}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{l.rule}</div>
-                    <div className="mt-auto pt-4 text-xs"><span className="text-muted-foreground">This tag comes from {l.needs.source}.</span> <span className="font-medium underline underline-offset-2">Connect it to start tagging</span></div>
-                  </Link>
-                ) : (
-                  <Link key={l.id} to="/vcro/watchlists" search={{ group: l.id }} resetScroll={false}
-                    className={cn("group rounded-xl border bg-card p-4 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      l.id === sel.id && "ring-2 ring-foreground")}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">{l.kind === "who" && l.id.startsWith("tag:") && <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted">{tagIcon(l.name)}</span>}<span className="truncate">{l.name}</span></div>
-                      {l.change !== null && l.change !== 0 && <DeltaBadge value={l.change} />}
-                    </div>
-                    <div className="mt-1 line-clamp-2 min-h-8 text-xs text-muted-foreground">{l.rule}</div>
-                    <div className="mt-3 flex items-end justify-between gap-2">
-                      <div><div className="text-2xl font-semibold tabular-nums">{fmt(l.members.length)}</div><div className="text-xs text-muted-foreground">people · {fmt(l.high)} High or Critical</div></div>
-                      <div className="flex flex-col items-end gap-2">
-                        {l.avg !== null && <BandBadge band={l.band} score={l.avg} />}
-                        <div className="flex -space-x-2">
-                          {l.members.slice(0, 4).map((m) => (
-                            <span key={m.id} className="grid size-7 place-items-center rounded-full border-2 border-card bg-muted text-[10px] font-medium" style={{ boxShadow: `inset 0 -2px 0 ${BAND_VAR[m.band]}` }}>{privacy ? "··" : initials(m.name)}</span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+      <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="rounded-2xl border bg-card p-3 lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto" aria-label="Groups">
+          <div className="relative mb-2"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a group" aria-label="Find a group" className="h-8 pl-8" /></div>
+          {SECTIONS.map((sec) => {
+            const items = lists.filter((l) => l.kind === sec.kind && l.name.toLowerCase().includes(find.trim().toLowerCase()));
+            if (!items.length && (find || sec.kind !== "own")) return null;
+            return (
+              <div key={sec.kind} className="mt-3 first:mt-0">
+                <div className="flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sec.title}<InfoTip label={sec.title} text={sec.hint} /></div>
+                {!items.length && <p className="px-2 py-1.5 text-xs text-muted-foreground">Nothing yet. Create a watchlist or a tag.</p>}
+                <ul>
+                  {items.map((l) => l.needs ? (
+                    <li key={l.id}>
+                      <Link to="/vcro/signals/$id" params={{ id: l.needs.sourceId }} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-md border border-dashed">{tagIcon(l.name)}</span>
+                        <span className="min-w-0 flex-1 truncate">{l.name}</span><span className="shrink-0 text-xs font-medium text-foreground underline underline-offset-2">Connect</span>
+                      </Link>
+                    </li>
+                  ) : (
+                    <li key={l.id}>
+                      <Link to="/vcro/watchlists" search={{ group: l.id }} resetScroll={false} aria-current={l.id === sel.id ? "true" : undefined}
+                        className={cn("flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", l.id === sel.id && "bg-muted font-medium")}>
+                        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted" style={l.id === sel.id ? { background: "var(--card)" } : undefined}>{l.kind === "who" || tags.some((t) => t.id === l.id) ? tagIcon(l.name) : <span className="size-2 rounded-full" style={{ background: BAND_VAR[l.band] }} />}</span>
+                        <span className="min-w-0 flex-1 truncate">{l.name}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt(l.members.length)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            )}
-          </section>
-        );
-      }) : (
-        <Card className="overflow-x-auto p-0 shadow-none">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead><tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground"><th className="px-4 py-2 font-medium">Group</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 text-right font-medium">People</th><th className="px-3 py-2 text-right font-medium">High or Critical</th><th className="px-3 py-2 font-medium">Average score</th><th className="px-3 py-2 font-medium">Change</th></tr></thead>
-            <tbody>
-              {lists.filter((l) => !l.needs).map((l) => (
-                <tr key={l.id} className={cn("border-b last:border-0 hover:bg-muted/50", l.id === sel.id && "bg-muted/60")}>
-                  <td className="px-4 py-2.5"><Link to="/vcro/watchlists" search={{ group: l.id }} resetScroll={false} className="font-medium underline-offset-2 hover:underline">{l.name}</Link><div className="max-w-md truncate text-xs text-muted-foreground">{l.rule}</div></td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{l.kind === "who" ? "Tag" : l.kind === "behaviour" ? "Behaviour" : "Yours"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmt(l.members.length)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmt(l.high)}</td>
-                  <td className="px-3 py-2.5">{l.avg !== null ? <BandBadge band={l.band} score={l.avg} /> : <span className="text-muted-foreground">None</span>}</td>
-                  <td className="px-3 py-2.5">{l.change !== null ? <DeltaBadge value={l.change} /> : <span className="text-muted-foreground">None</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
+            );
+          })}
+        </aside>
 
-      <Card className="gap-3 rounded-xl p-4 shadow-none">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold">{sel.name} <span className="font-normal text-muted-foreground">· {fmt(sel.members.length)} people</span></h2>
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">{sel.rule}
-            {sel.custom && <Button variant="ghost" size="sm" onClick={del}><Trash2 className="size-3.5" />{sel.id === "pinned" ? "Clear" : "Delete"}</Button>}</span>
-        </div>
-        {ready ? <PeopleTable key={sel.id} people={sel.members} exportName={`vcro-watchlist-${sel.id.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`} /> : <Skeleton className="h-96 w-full" />}
-      </Card>
+        <Card className="min-w-0 gap-4 rounded-2xl p-5 shadow-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-tight">{sel.name}</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">{sel.rule}</p>
+            </div>
+            {sel.custom && <Button variant="outline" size="sm" onClick={del}><Trash2 className="size-3.5" />{sel.id === "pinned" ? "Clear" : "Delete"}</Button>}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[["People", fmt(sel.members.length)], ["High or Critical", fmt(sel.high)]].map(([k, v]) => <div key={k} className="rounded-xl border p-3"><div className="text-xs text-muted-foreground">{k}</div><div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div></div>)}
+            <div className="rounded-xl border p-3"><div className="text-xs text-muted-foreground">Average score</div><div className="mt-1">{sel.avg !== null ? <BandBadge band={sel.band} score={sel.avg} /> : <span className="text-sm text-muted-foreground">None</span>}</div></div>
+            <div className="rounded-xl border p-3"><div className="text-xs text-muted-foreground">Since last month</div><div className="mt-1">{sel.change !== null ? <DeltaBadge value={sel.change} /> : <span className="text-sm text-muted-foreground">None</span>}</div></div>
+          </div>
+          {ready ? <PeopleTable key={sel.id} people={sel.members} exportName={`vcro-watchlist-${sel.id.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`} /> : <Skeleton className="h-96 w-full" />}
+        </Card>
+      </div>
     </div>
   );
 }

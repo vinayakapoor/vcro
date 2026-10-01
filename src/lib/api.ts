@@ -65,7 +65,7 @@ const DEFAULT_STORE: Store = {
 let store: Store = DEFAULT_STORE;
 const listeners = new Set<() => void>();
 // Bump the version when the source catalogue changes, so old saved connections do not hide new defaults.
-const KEY = "hf.vcro.v3";
+const KEY = "hf.vcro.v4";
 
 function persist() {
   if (typeof localStorage === "undefined") return;
@@ -450,7 +450,9 @@ export function orgSummary(s: SignalState) {
       acc += v;
       if ((i + 1) % step === 0 || i === sorted.length - 1) pareto.push({ people: Math.round(((i + 1) / sorted.length) * 100), risk: Math.round((acc / totalRisk) * 100) });
     });
-    const topN = Math.max(1, Math.round(sorted.length * 0.1));
+    // Same cut as the Top 10% by risk watchlist, ties included, so the two counts always agree.
+    const cut = sorted[Math.max(0, Math.round(sorted.length * 0.1) - 1)] ?? 0;
+    const topN = sorted.filter((v) => v >= cut).length;
     const drivers = Object.keys({ ...driversNow, ...driversPrev })
       .map((category) => ({ category, delta: Math.round(((driversNow[category] ?? 0) - (driversPrev[category] ?? 0)) * 10) / 10 }))
       .filter((d) => d.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
@@ -468,7 +470,7 @@ export function orgSummary(s: SignalState) {
       vipAttacked: people.filter((p) => p.tags.includes("VIP") && p.tags.includes("Very attacked")).length,
       lowConfidence: sc.filter((p) => p.lowConfidence).length,
       departments: deptStats(s), pareto, drivers,
-      concentration: { people: 10, risk: Math.round((sorted.slice(0, topN).reduce((a, b) => a + b, 0) / totalRisk) * 100), count: topN },
+      concentration: { people: Math.round((topN / (sorted.length || 1)) * 100), risk: Math.round((sorted.slice(0, topN).reduce((a, b) => a + b, 0) / totalRisk) * 100), count: topN },
       channels: channelStats(allSims), lures: lureStats(allSims), simsLive: allSims.length > 0,
     };
   });
@@ -537,7 +539,7 @@ export function recommendedActions(s: SignalState, auto: Settings["automation"])
     const defs: ActionDef[] = [
       { id: "a1", action: "Remediate repeat clickers", target: "Repeat clickers", workflow: "Repeat clicker remediation", lowEffort: false, fix: SIM_IDS, members: (p) => p.fails180 >= 2, watchlist: "repeat-clickers" },
       { id: "a2", action: "Reset credential submitters", target: "Credential submitters", workflow: "Credential submitter reset", lowEffort: false, fix: ["sim-email", "sim-vish", "sim-smish", "sim-deepfake"], members: (p) => p.sims.some((x) => x.outcome === "Data entered" && x.ageDays <= 120), watchlist: "credential-submitters" },
-      { id: "a3", action: "Brief targeted VIPs", target: "Very attacked VIPs", workflow: "VIP protection briefing", lowEffort: false, fix: ["sim-deepfake", "sim-vish", "sim-callback", "att-confidence"], members: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked"), watchlist: "very-attacked-vips" },
+      { id: "a3", action: "Brief targeted VIPs", target: "Very attacked VIPs", workflow: "VIP protection briefing", lowEffort: false, fix: ["sim-deepfake", "sim-vish", "sim-callback"], members: (p) => p.tags.includes("VIP") && p.tags.includes("Very attacked"), watchlist: "very-attacked-vips" },
       { id: "a4", action: "Run vishing drill", target: voice.d, workflow: "Vishing awareness drill", lowEffort: false, fix: ["sim-vish", "sim-callback"], members: (p) => p.department === voice.d, dept: voice.d },
       { id: "a5", action: "Assign QR module", target: "Weakest on QR", workflow: "QR safety micro-module", lowEffort: true, fix: ["sim-qr"], members: (p) => p.weakestChannel === "QR" },
       { id: "a6", action: "Chase overdue training", target: "Overdue training", workflow: "Overdue training reminder", lowEffort: true, fix: ["lrn-overdue", "lrn-complete"], members: (p) => (p.now["lrn-overdue"]?.value ?? 0) > 60, watchlist: "overdue-training" },
@@ -553,7 +555,7 @@ export function recommendedActions(s: SignalState, auto: Settings["automation"])
 }
 
 const STEP_FIX: Record<string, string[]> = {
-  channel: SIM_IDS, cred: ["sim-email", "sim-vish", "sim-smish", "sim-deepfake"], overdue: ["lrn-overdue", "lrn-complete"], vip: ["sim-deepfake", "sim-vish", "sim-callback", "att-confidence"],
+  channel: SIM_IDS, cred: ["sim-email", "sim-vish", "sim-smish", "sim-deepfake"], overdue: ["lrn-overdue", "lrn-complete"], vip: ["sim-deepfake", "sim-vish", "sim-callback"],
 };
 export function nextSteps(s: SignalState, p: ScoredPerson) {
   const steps: { id: string; action: string; workflow: (typeof WORKFLOWS)[number]; fix: string[] }[] = [];
@@ -610,9 +612,15 @@ export function alerts(s: SignalState, set: Settings): Alert[] {
 }
 
 // ---------- Signals ----------
+/** One set of counts for every page: modules, integrations that feed the score, integrations that act on it. */
 export function signalStats(s: SignalState) {
-  const feeding = SOURCES.filter((x) => x.direction !== "Action out");
-  return { connectedSources: feeding.filter((x) => s.connected.has(x.id)).length, totalSources: feeding.length, outbound: SOURCES.filter((x) => x.direction === "Action out" && s.connected.has(x.id)).length, active: s.active.size, total: ELEMENTS.length, confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), lastSync: "1 Oct, 10:44" };
+  const of = (f: (x: (typeof SOURCES)[number]) => boolean) => { const l = SOURCES.filter(f); return { on: l.filter((x) => s.connected.has(x.id)).length, total: l.length }; };
+  const modules = of((x) => x.kind === "Module"), inbound = of((x) => x.direction === "Signal in"), outbound = of((x) => x.direction === "Action out");
+  return {
+    modules, inbound, outbound,
+    integrations: { on: inbound.on + outbound.on, total: inbound.total + outbound.total },
+    active: s.active.size, total: ELEMENTS.length, confidence: confidenceFor(ELEMENTS, (e) => s.active.has(e.id)), lastSync: "1 Oct, 10:44",
+  };
 }
 const fromOf = (els: typeof ELEMENTS) => [...new Set(els.map((e) => SOURCES.find((x) => x.id === e.sourceId)!.name))];
 export function signalCoverage(s: SignalState) {
@@ -622,9 +630,6 @@ export function signalCoverage(s: SignalState) {
     const live = els.filter((e) => s.active.has(e.id));
     return { pillar: pillar as string, active: live.length, total: els.length, coverage: Math.round((live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) / w) * 100), from: fromOf(live) };
   });
-  const att = ELEMENTS.filter((e) => e.category === "Attitude");
-  const attLive = att.filter((e) => s.active.has(e.id));
-  pillars.splice(1, 0, { pillar: "Attitude", active: attLive.length, total: att.length, coverage: att.length ? Math.round((attLive.length / att.length) * 100) : 0, from: fromOf(attLive) });
   const ai = ELEMENTS.filter((e) => e.category === "AI agents");
   const aiLive = ai.filter((e) => s.active.has(e.id));
   pillars.push({ pillar: "AI identities", active: aiLive.length, total: ai.length, coverage: Math.round((aiLive.length / ai.length) * 100), from: fromOf(aiLive) });
@@ -657,7 +662,7 @@ export function weakestSignals(s: SignalState) {
   });
 }
 
-export const HEAT_CATEGORIES = ["Simulations", "Real-world incidents", "Learning", "Security hygiene", "Culture", "Attitude", "Targeting", "Human OSINT", "Role visibility", "Access and admin", "Financial authority", "Data access", "AI agents"] as const;
+export const HEAT_CATEGORIES = ["Simulations", "Real-world incidents", "Learning", "Security hygiene", "Culture", "Targeting", "Human OSINT", "Role visibility", "Access and admin", "Financial authority", "Data access", "AI agents"] as const;
 export function deptHeatmap(s: SignalState) {
   return memo(s, "heat", () => {
     const people = getPeople(s).filter((p) => p.score !== null);
@@ -674,19 +679,29 @@ export function deptHeatmap(s: SignalState) {
 export function awarenessByDept(s: SignalState) {
   return memo(s, "aware", () => {
     const people = getPeople(s);
-    const pct = (xs: boolean[]) => (xs.length ? Math.round((xs.filter(Boolean).length / xs.length) * 100) : 0);
     return DEPARTMENTS.map((d) => {
       const ps = people.filter((p) => p.department === d);
+      const share = (id: string) => { let n = 0, good = 0; for (const p of ps) { const r = p.now[id]; if (r) { n++; if (r.value < 50) good++; } } return n ? Math.round((good / n) * 100) : 0; };
       const sim = rates(ps.flatMap((p) => p.sims));
       return {
         department: d,
-        completion: pct(ps.map((p) => (p.now["lrn-complete"]?.value ?? 100) < 50)),
+        completion: share("lrn-complete"),
         overdue: ps.filter((p) => (p.now["lrn-overdue"]?.value ?? 0) > 60).length,
-        jit: pct(ps.map((p) => (p.now["lrn-jit"]?.value ?? 100) < 50)),
-        policy: pct(ps.map((p) => (p.now["cul-policy"]?.value ?? 100) < 50)),
+        jit: share("lrn-jit"),
+        policy: share("cul-policy"),
+        repeat: ps.filter((p) => p.fails180 >= 2).length,
         reportRate: Math.round(sim.reportRate * 100), people: ps.length,
       };
     });
+  });
+}
+
+/** Organisation-wide awareness figures, counted per person. Every page uses these, so they always agree. */
+export function awarenessTotals(s: SignalState) {
+  return memo(s, "awareTotals", () => {
+    const people = getPeople(s);
+    const share = (id: string) => { let n = 0, good = 0; for (const p of people) { const r = p.now[id]; if (r) { n++; if (r.value < 50) good++; } } return n ? Math.round((good / n) * 100) : 0; };
+    return { completion: share("lrn-complete"), jit: share("lrn-jit"), policy: share("cul-policy"), overdue: people.filter((p) => (p.now["lrn-overdue"]?.value ?? 0) > 60).length };
   });
 }
 
@@ -828,6 +843,8 @@ export const pseudonym = (id: string) => `Employee ${id.slice(1)}`;
 export const initials = (name: string) => name.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase();
 
 export const PREV_MONTH = MONTHS[10]!;
+/** Name of each department's head, from the directory. */
+export const PEOPLE_HEADS = Object.fromEntries(PEOPLE.filter((p) => p.level === "Head").map((p) => [p.department, p.name])) as Record<Department, string>;
 export { SIGNAL_HOW } from "@/data/catalogue";
 export { ELEMENTS, SOURCES, MONTHS, DEPARTMENTS, LOCATIONS, CHANNELS, LURES, TEMPLATES, WORKFLOWS };
 export { DIRECTORY_GROUPS, TAGS, groupMembers };
