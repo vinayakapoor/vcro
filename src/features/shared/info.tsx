@@ -11,7 +11,6 @@ export const GLOSSARY: Record<string, string> = {
   "Report rate": "Of all simulated attacks sent, the share people reported to security. Next to it is the share they fell for. You want the first to be the bigger number.",
   "Repeat clickers": "People who failed 2 or more simulated attacks in the last 180 days. One slip is normal; a pattern needs coaching.",
   "Very attacked VIPs": "Senior or privileged people who also receive far more targeted attacks than average. One mistake here costs the most.",
-  "Exposure estimate": "Expected incidents times your cost per incident. Expected incidents is the sum of score divided by 100 across High and Critical people. Use it to compare months, not as a loss forecast.",
   "Provisional scores": "People whose score has less live data behind it than your minimum confidence. Their score is shown with a dashed outline and can move once more sources connect.",
   "Scored people": "People with at least one simulation result and one learning signal, the minimum for a score.",
   "Insufficient data": "People without a score yet because they have no simulation result or no learning signal.",

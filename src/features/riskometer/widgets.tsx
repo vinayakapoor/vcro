@@ -14,12 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Widget } from "@/features/shared/widget";
+import { InfoTip } from "@/features/shared/info";
 import { Gauge } from "@/features/shared/gauge";
 import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/band";
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, LURES, PREV_MONTH, bestNextSources, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  DEPARTMENTS, LURES, PREV_MONTH, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -75,22 +76,21 @@ export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "E
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
   return (
     <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <div className="flex flex-1 items-center justify-center"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
-      <div className="mt-3 border-t pt-3"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
+      <div className="flex flex-1 items-center justify-center px-2 py-8"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
+      <div className="flex justify-center border-t pt-4"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
     </Widget>
   );
 }
 
 export function BandsCard({ s, ready }: { s: Summary; ready: boolean }) {
-  const max = Math.max(1, ...s.bands.map((b) => b.count));
   return (
     <Widget title="People by band" ready={ready} action={<span className="text-xs tabular-nums text-muted-foreground">{fmt(s.scored)} scored</span>}>
       <div className="space-y-0.5">
         {s.bands.map((b) => (
-          <Link key={b.band} to="/vcro/people" search={{ band: b.band }} title={`See the ${fmt(b.count)} people in ${b.band}`}
+          <Link key={b.band} to="/vcro/people" search={{ band: b.band }} aria-label={`See the ${fmt(b.count)} people in ${b.band}`}
             className="-mx-1.5 grid grid-cols-[78px_1fr_auto] items-center gap-3 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: BAND_VAR[b.band] }} />{b.band}</span>
-            <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, minWidth: b.count ? 3 : 0, background: BAND_VAR[b.band] }} /></span>
+            <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${s.scored ? (b.count / s.scored) * 100 : 0}%`, minWidth: b.count ? 3 : 0, background: BAND_VAR[b.band] }} /></span>
             <span className="w-24 text-right tabular-nums">{fmt(b.count)}<span className="ml-1.5 text-xs text-muted-foreground">{pct(s.scored ? b.count / s.scored : 0)}</span></span>
           </Link>
         ))}
@@ -124,11 +124,10 @@ export function TrendCard({ ready }: { ready: boolean }) {
   const { targetScore } = useSettings();
   const mobile = useIsMobile();
   const data = ready ? trends(sig).org : [];
-  const vals = [...data.map((d) => d.score), ...(targetScore !== null ? [targetScore] : [])];
-  const domain: [number, number] = vals.length ? [tens(Math.min(...vals) - 8, false), tens(Math.max(...vals) + 8, true)] : [0, 100];
+  const { domain, ticks } = axisFor([...data.map((d) => d.value), ...(targetScore !== null ? [targetScore] : [])]);
   return (
     <Widget
-      title="Risk trend" ready={ready} className="lg:col-span-8"
+      title="Risk trend" ready={ready} className="lg:col-span-8" info={`Organisation score for each of the last 12 months. The axis is zoomed to ${domain[0]} to ${domain[1]} so month-to-month movement is visible. Dashed lines mark campaigns. Set a target in Settings to draw a goal line.`}
       action={targetScore !== null
         ? <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span className="h-px w-4 border-t border-dashed border-success" aria-hidden />Target {targetScore}</span>
         : <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground"><Link to="/vcro/settings">Set a target score</Link></Button>}
@@ -138,19 +137,19 @@ export function TrendCard({ ready }: { ready: boolean }) {
           <AreaChart data={data} margin={{ top: 18, right: 12, left: 4, bottom: 16 }}>
             <CartesianGrid vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" tick={AXIS} tickLine={false} axisLine={false} label={{ value: "Month", position: "insideBottom", offset: -8, ...AXIS }} />
-            <YAxis domain={domain} tick={AXIS} tickLine={false} axisLine={false} width={44} allowDecimals={false} label={{ value: "Score", angle: -90, position: "insideLeft", offset: 10, ...AXIS }} />
+            <YAxis domain={domain} ticks={ticks} tick={AXIS} tickLine={false} axisLine={false} width={44} allowDecimals={false} label={{ value: "Score", angle: -90, position: "insideLeft", offset: 10, ...AXIS }} />
             {data.filter((t) => t.intervention).map((t) => (
               <ReferenceLine key={t.month} x={t.month} stroke="var(--muted-foreground)" strokeDasharray="3 3" {...(mobile ? {} : { label: { value: t.intervention!, position: "top" as const, ...AXIS, fontSize: 10 } })} />
             ))}
             {targetScore !== null && <ReferenceLine y={targetScore} stroke="var(--success)" strokeDasharray="5 4" />}
-            <Area dataKey="score" stroke="var(--foreground)" strokeWidth={2} fill="var(--foreground)" fillOpacity={0.05} isAnimationActive={false} dot={{ r: 2.5, fill: "var(--foreground)", strokeWidth: 0 }} />
+            <Area type="monotone" dataKey="value" stroke="var(--foreground)" strokeWidth={2} fill="var(--foreground)" fillOpacity={0.05} isAnimationActive={false} dot={{ r: 2.5, fill: "var(--foreground)", strokeWidth: 0 }} />
             <RTooltip content={({ active, payload }) => {
               const d = payload?.[0]?.payload as (typeof data)[number] | undefined;
               if (!active || !d) return null;
               return (
                 <ChartTip>
                   <div className="font-medium">{d.month}</div>
-                  <div>Score {d.score} · {d.band}</div>
+                  <div>Score {d.value.toFixed(1)} · {d.band}</div>
                   <div>Change {d.delta > 0 ? "+" : ""}{d.delta} pts</div>
                   {d.intervention && <div>{d.intervention}</div>}
                 </ChartTip>
@@ -159,7 +158,7 @@ export function TrendCard({ ready }: { ready: boolean }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">Axis shows {domain[0]} to {domain[1]} so month-to-month movement is visible. Dashed lines mark campaigns.</p>
+      
     </Widget>
   );
 }
@@ -277,58 +276,59 @@ export function MatrixCard({ s, ready }: { s: Summary; ready: boolean }) {
   );
 }
 
+function RateBar({ value, tone, label }: { value: number; tone: string; label: string }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full" style={{ width: `${value}%`, background: tone }} /></span>
+      <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums" aria-label={`${label} ${value}%`}>{value}%</span>
+    </span>
+  );
+}
+
 export function SusceptibilityCard({ s, ready }: { s: Summary; ready: boolean }) {
   const signals = useSignals();
   const [dept, setDept] = useState<Department>("Finance");
-  const deptL = deptLures(signals, dept);
-  const channels = s.channels.map((c) => ({ channel: c.channel, failure: Math.round(c.failRate * 100), report: Math.round(c.reportRate * 100) }));
-  const lures = LURES.map((l) => ({ lure: l, org: s.lures[l], dept: deptL[l] }));
+  const deptL = ready ? deptLures(signals, dept) : null;
+  const channels = s.channels.map((c) => ({ name: c.channel, sent: c.attempts, fail: Math.round(c.failRate * 100), report: Math.round(c.reportRate * 100) })).sort((a, b) => b.fail - a.fail);
+  const lures = LURES.map((l) => ({ name: l, org: s.lures[l], dept: deptL?.[l] ?? 0 })).sort((a, b) => b.org - a.org);
+  const worst = channels[0];
+  const head = "grid grid-cols-[92px_1fr_1fr] gap-x-5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+  const row = "grid grid-cols-[92px_1fr_1fr] items-center gap-x-5 py-2.5";
   return (
-    <Widget title="Susceptibility" ready={ready} className="lg:col-span-6" notConnected={!s.simsLive}>
-      <Tabs defaultValue="channel">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <TabsList><TabsTrigger value="channel">By channel</TabsTrigger><TabsTrigger value="lure">By lure</TabsTrigger></TabsList>
-        </div>
-        <TabsContent value="channel">
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart data={channels} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 16 }} barGap={2}>
-                <CartesianGrid horizontal={false} stroke="var(--border)" />
-                <XAxis type="number" domain={[0, 100]} tick={AXIS} tickLine={false} axisLine={false} unit="%" label={{ value: "Rate (% of simulations)", position: "insideBottom", offset: -8, ...AXIS }} />
-                <YAxis type="category" dataKey="channel" tick={AXIS} tickLine={false} axisLine={false} width={64} />
-                <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="failure" name="Failure rate" fill="var(--band-high)" radius={[0, 5, 5, 0]} barSize={10} isAnimationActive={false} />
-                <Bar dataKey="report" name="Report rate" fill="var(--band-low)" radius={[0, 5, 5, 0]} barSize={10} isAnimationActive={false} />
-                <RTooltip cursor={{ fill: "var(--muted)" }} content={({ active, payload }) => {
-                  const d = payload?.[0]?.payload as (typeof channels)[number] | undefined;
-                  return active && d ? <ChartTip><div className="font-medium">{d.channel}</div><div>Failure {d.failure}%</div><div>Report {d.report}%</div></ChartTip> : null;
-                }} />
-              </BarChart>
-            </ResponsiveContainer>
+    <Widget title="Susceptibility" ready={ready} className="flex flex-col lg:col-span-6" contentClassName="flex flex-1 flex-col" notConnected={!s.simsLive}
+      info="How often people fall for simulated attacks and how often they report them, by attack channel and by the persuasion trick used. You want Reported to be the longer bar.">
+      <Tabs defaultValue="channel" className="flex flex-1 flex-col">
+        <TabsList className="self-start"><TabsTrigger value="channel">By channel</TabsTrigger><TabsTrigger value="lure">By lure</TabsTrigger></TabsList>
+        <TabsContent value="channel" className="mt-4 flex flex-1 flex-col">
+          {worst && <p className="mb-4 text-sm"><span className="font-semibold">{worst.name} is the weakest channel.</span> <span className="text-muted-foreground">{worst.fail}% of {worst.name} simulations were fallen for and {worst.report}% were reported.</span></p>}
+          <div className={head}><span>Channel</span><span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-band-high" />Fell for</span><span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-band-low" />Reported</span></div>
+          <div className="mt-1 flex flex-1 flex-col justify-around divide-y">
+            {channels.map((c) => (
+              <div key={c.name} className={row}>
+                <span><span className="block text-sm font-medium">{c.name}</span><span className="block text-xs tabular-nums text-muted-foreground">{fmt(c.sent)} sent</span></span>
+                <RateBar value={c.fail} tone="var(--band-high)" label="Fell for" />
+                <RateBar value={c.report} tone="var(--band-low)" label="Reported" />
+              </div>
+            ))}
           </div>
         </TabsContent>
-        <TabsContent value="lure">
-          <div className="flex justify-end">
+        <TabsContent value="lure" className="mt-4 flex flex-1 flex-col">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm"><span className="font-semibold">{lures[0]?.name} works best on your people.</span> <span className="text-muted-foreground">Compare a department with the organisation.</span></p>
             <Select value={dept} onValueChange={(v) => setDept(v as Department)}>
-              <SelectTrigger className="h-8 w-48" aria-label="Department"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-44" aria-label="Department"><SelectValue /></SelectTrigger>
               <SelectContent>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="h-60">
-            <ResponsiveContainer>
-              <RadarChart data={lures} outerRadius="72%">
-                <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis dataKey="lure" tick={AXIS} />
-                <PolarRadiusAxis domain={[0, 100]} tick={{ ...AXIS, fontSize: 9 }} angle={90} tickFormatter={(v) => `${v}%`} />
-                <Radar name="Organisation" dataKey="org" stroke="var(--foreground)" fill="var(--foreground)" fillOpacity={0.08} isAnimationActive={false} />
-                <Radar name={dept} dataKey="dept" stroke="var(--band-high)" fill="var(--band-high)" fillOpacity={0.15} isAnimationActive={false} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <RTooltip content={({ active, payload }) => {
-                  const d = payload?.[0]?.payload as (typeof lures)[number] | undefined;
-                  return active && d ? <ChartTip><div className="font-medium">{d.lure}</div><div>Organisation {d.org}% failure</div><div>{dept} {d.dept}% failure</div></ChartTip> : null;
-                }} />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div className={head}><span>Lure</span><span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-foreground" />Organisation fell for</span><span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-band-high" />{dept} fell for</span></div>
+          <div className="mt-1 flex flex-1 flex-col justify-around divide-y">
+            {lures.map((l) => (
+              <div key={l.name} className={row}>
+                <span className="text-sm font-medium">{l.name}</span>
+                <RateBar value={l.org} tone="var(--foreground)" label="Organisation" />
+                <RateBar value={l.dept} tone="var(--band-high)" label={dept} />
+              </div>
+            ))}
           </div>
         </TabsContent>
       </Tabs>
@@ -456,7 +456,14 @@ export function ActionsCard({ ready }: { ready: boolean }) {
   );
 }
 
-const TILE_TO: Record<string, string> = { Behaviour: "What people do", Attitude: "How people feel about security", Exposure: "How targeted and visible people are", Privilege: "What people can reach", Reporting: "How people report threats", "AI identities": "AI agents people own" };
+const TILE_INFO: Record<string, string> = {
+  Behaviour: "What people do: simulation results, real incidents, training, security hygiene and culture.",
+  Attitude: "How people feel about security. Three check-in questions sent through Feedback, each answered on a five-point scale: confidence spotting scams, willingness to report, and time pressure. Part of Behaviour.",
+  Exposure: "How targeted and visible people are: attack volume, breached credentials, public footprint and role.",
+  Privilege: "What people can reach: admin rights, critical systems, payment authority and sensitive data.",
+  Reporting: "How people report threats. This is a credit: more and faster reporting takes points off the score.",
+  "AI identities": "The AI agents people own, what those agents can reach and whether their access has been reviewed.",
+};
 
 export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage> }) {
   const sig = useSignals();
@@ -465,46 +472,38 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
       action={<Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>}>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {cov.pillars.map((p) => (
-          <div key={p.pillar} className="rounded-xl border bg-muted/40 p-3" title={p.from.length ? `From ${p.from.join(", ")}` : undefined}>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{p.pillar}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">{p.active}/{p.total}</span>
+          <div key={p.pillar} className="rounded-xl border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{p.pillar}
+                <InfoTip label={p.pillar} text={`${TILE_INFO[p.pillar]} ${p.from.length ? `Live from ${p.from.join(", ")}.` : "No source connected yet."} The percentage is how much of this part of the model has live data, not a risk score.`} /></span>
             </div>
-            <div className="mt-1 font-mono text-xl font-bold tabular-nums">{p.coverage}%</div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className={`h-full rounded-full ${p.coverage === 100 ? "bg-success" : p.coverage >= 70 ? "bg-foreground" : "bg-band-high"}`} style={{ width: `${p.coverage}%` }} />
-            </div>
-            <div className="mt-2 text-[11px] leading-snug text-muted-foreground">
-              <span className="block text-foreground/80">{TILE_TO[p.pillar]}</span>
-              {p.from.length ? <span className="block truncate">From {p.from.slice(0, 2).join(", ")}{p.from.length > 2 && ` +${p.from.length - 2}`}</span>
-                : <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium text-foreground underline underline-offset-2">Connect a source</Link>}
-            </div>
+            {p.active === 0
+              ? <Link to="/vcro/signals" search={{ tab: "integrations" }} className="mt-3 block text-sm font-semibold underline underline-offset-2">Connect a source</Link>
+              : <div className="mt-3 text-2xl font-bold tabular-nums tracking-tight">{p.coverage}%</div>}
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground" style={{ width: `${p.coverage}%` }} /></div>
+            <div className="mt-2 text-xs tabular-nums text-muted-foreground">{p.active} of {p.total} signals live</div>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Percentages show how much of each part of the model has live data. Attitude is part of Behaviour, shown on its own because it comes from check-in questions, not events.</p>
 
-      <div className="mt-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-xs">
-          <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{live.length} of {cov.sources.length} sources connected</span> · {fmt(cov.events30d)} events in 30 days</span>
-          {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium underline underline-offset-2">See all {next.length} you can add</Link>}
-        </div>
-        {next.length > 0 ? (
-          <ul className="mt-2 grid gap-2 md:grid-cols-3">
-            {next.slice(0, 3).map((n) => (
-              <li key={n.id} className="rounded-xl border">
-                <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 rounded-xl px-3 py-2 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">Adds {n.signals} {n.signals === 1 ? "signal" : "signals"}</span></span>
-                  <span className="shrink-0 rounded-md bg-success/10 px-1.5 py-0.5 text-xs font-medium tabular-nums text-success">+{n.gain}% confidence</span>
-                  <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="mt-2 rounded-xl border bg-success/5 p-3 text-sm text-success">Every source is connected. The score has full data behind it.</p>}
+      <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 border-t pt-4 text-sm">
+        <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{live.length} of {cov.sources.length} sources connected</span> · {fmt(cov.events30d)} events in 30 days</span>
+        {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all {next.length} you can add</Link>}
       </div>
+      {next.length > 0 ? (
+        <ul className="mt-3 grid gap-3 md:grid-cols-3">
+          {next.slice(0, 3).map((n) => (
+            <li key={n.id} className="rounded-xl border">
+              <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 rounded-xl p-4 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">+{n.gain}% confidence · {n.signals} {n.signals === 1 ? "signal" : "signals"}</span></span>
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="mt-3 rounded-xl border bg-success/5 p-4 text-sm text-success">Every source is connected. The score has full data behind it.</p>}
     </Widget>
   );
 }

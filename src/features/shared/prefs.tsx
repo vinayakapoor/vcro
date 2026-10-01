@@ -1,10 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { hydrateStore, patchSettings, useSettings, type Currency } from "@/lib/api";
+import { hydrateStore, patchSettings, useSettings } from "@/lib/api";
 
 export type Theme = "light" | "dark" | "system";
 type Prefs = {
-  currency: Currency;
-  setCurrency: (c: Currency) => void;
   askOpen: boolean;
   setAskOpen: (o: boolean) => void;
   theme: Theme;
@@ -39,7 +37,6 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      currency: settings.currency, setCurrency: (currency) => patchSettings({ currency }),
       privacy: settings.privacy, setPrivacy: (privacy) => patchSettings({ privacy }),
       askOpen, setAskOpen, theme, setTheme,
     }}>{children}</Ctx.Provider>

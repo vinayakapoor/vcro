@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { BAND_VAR, BandBadge, Change } from "./band";
 import { BAND_RANGES, bandFor } from "@/lib/scoring";
 
-const CX = 120, CY = 116, R = 92, W = 15;
+const CX = 120, CY = 116, R = 92, W = 13;
 const GAP = 0.9;
 
 function pt(v: number, r: number) {
@@ -29,6 +29,8 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
   const [shown, setShown] = useState(0);
   useEffect(() => {
     if (value === null) return;
+    // A background tab does not run animation frames: show the final position straight away.
+    if (document.hidden) { setShown(value); return; }
     let raf = 0;
     const start = performance.now();
     const tick = (t: number) => {
@@ -46,8 +48,8 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
 
   return (
     <div className="flex flex-col items-center">
-      <div className={compact ? "relative w-56" : "relative w-full max-w-[22rem]"}>
-        <svg viewBox="-6 -8 252 140" className="w-full overflow-visible" role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
+      <div className={compact ? "relative w-60" : "relative w-full max-w-[24rem]"}>
+        <svg viewBox="-10 -14 260 150" className="w-full overflow-visible" role="img" aria-label={`Risk score ${value ?? "none"} of 100, ${band}. Higher is riskier.`}>
           {SEGMENTS.map((sg, i) => {
             const a = sg.from + (i === 0 ? 0 : GAP), b = sg.to - (i === SEGMENTS.length - 1 ? 0 : GAP);
             const fillTo = Math.min(b, shown);
@@ -60,14 +62,14 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
             );
           })}
           {[0, 20, 40, 60, 80, 100].map((v) => {
-            const [x, y] = pt(v, R + 21);
+            const [x, y] = pt(v, R + 24);
             return <text key={v} x={x} y={y + 3} textAnchor="middle" className="fill-muted-foreground" fontSize={8.5}>{v}</text>;
           })}
-          {range && <path d={arc(range[0], range[1], R + W / 2 + 5)} fill="none" className="stroke-foreground/35" strokeWidth={2.5} strokeLinecap="round"><title>{`Likely range ${range[0]} to ${range[1]}`}</title></path>}
+          {range && <path d={arc(range[0], range[1], R + W / 2 + 6)} fill="none" className="stroke-foreground/30" strokeWidth={2} strokeLinecap="round" />}
           {prev !== null && value !== null && prev !== value && (() => {
             const [x1, y1] = pt(prev, R - W / 2 - 1);
             const [x2, y2] = pt(prev, R + W / 2 + 1);
-            return <line x1={x1} y1={y1} x2={x2} y2={y2} className="stroke-background" strokeWidth={2.5}><title>{`${prevLabel}: ${prev}`}</title></line>;
+            return <line x1={x1} y1={y1} x2={x2} y2={y2} className="stroke-background" strokeWidth={2.5} />;
           })()}
           {value !== null && (
             <>
@@ -77,15 +79,15 @@ export function Gauge({ value, prev, prevLabel, compact, confidence }: { value: 
           )}
         </svg>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center">
-          <div className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-6xl font-bold leading-none tracking-tighter tabular-nums sm:text-7xl"}>{value ?? <span className="text-3xl tracking-tight text-muted-foreground">None</span>}</div>
-          <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{value === null ? "No score yet" : "of 100"}</div>
+          <div className={compact ? "text-4xl font-bold leading-none tracking-tight tabular-nums" : "text-6xl font-bold leading-none tracking-tighter tabular-nums sm:text-[4.25rem]"}>{value ?? <span className="text-3xl tracking-tight text-muted-foreground">None</span>}</div>
+          <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{value === null ? "No score yet" : "of 100"}</div>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
         <BandBadge band={band} />
         {value !== null && prev !== null && <span className="text-sm"><Change value={value - prev} vs={prevLabel} /></span>}
       </div>
-      {range && <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">Likely range {range[0]} to {range[1]} at {confidence}% confidence</div>}
+      {range && <div className="mt-2 text-xs text-muted-foreground tabular-nums">Likely range {range[0]} to {range[1]}</div>}
     </div>
   );
 }

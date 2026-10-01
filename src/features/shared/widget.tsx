@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { InfoTip } from "./info";
 
 export function Widget({
-  title, action, ready, empty, notConnected, children, className, contentClassName,
+  title, action, ready, empty, notConnected, children, className, contentClassName, info,
 }: {
   title: ReactNode;
   action?: ReactNode;
@@ -18,14 +18,16 @@ export function Widget({
   children: ReactNode;
   className?: string | undefined;
   contentClassName?: string | undefined;
+  /** Explainer behind the (i). Falls back to the glossary entry for the title. */
+  info?: string | undefined;
 }) {
   return (
-    <Card className={cn("min-w-0 gap-3 rounded-xl py-4 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition-shadow hover:shadow-[0_4px_16px_-6px_color-mix(in_oklab,var(--foreground)_14%,transparent)]", className)}>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
-        <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">{title}{typeof title === "string" && <InfoTip label={title} />}</CardTitle>
+    <Card className={cn("min-w-0 gap-4 rounded-2xl py-5 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition-shadow hover:shadow-[0_4px_16px_-6px_color-mix(in_oklab,var(--foreground)_14%,transparent)]", className)}>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-5">
+        <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">{title}{typeof title === "string" && <InfoTip label={title} text={info} />}</CardTitle>
         {action}
       </CardHeader>
-      <CardContent className={cn("min-w-0 px-4", contentClassName)}>
+      <CardContent className={cn("min-w-0 px-5", contentClassName)}>
         {!ready ? (
           <div className="space-y-2"><Skeleton className="h-6 w-1/3" /><Skeleton className="h-32 w-full" /></div>
         ) : notConnected ? (

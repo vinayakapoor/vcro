@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader, StatCard } from "@/features/shared/widget";
 import { SoftBadge, StatusBadge } from "@/features/shared/band";
+import { InfoTip } from "@/features/shared/info";
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { useReady } from "@/features/shared/prefs";
 import {
-  ELEMENTS, ELEMENT_WEIGHTS, SOURCES, applyState, fmt, formatStamp, orgScoreFor, previewElement, signalStats, sourceGain, useConnectors, useSignals, type SignalState,
+  ELEMENTS, ELEMENT_WEIGHTS, SIGNAL_HOW, SOURCES, applyState, fmt, formatStamp, orgScoreFor, previewElement, signalStats, sourceGain, useConnectors, useSignals, type SignalState,
 } from "@/lib/api";
 import type { ElementDef } from "@/lib/scoring";
 
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/vcro/signals/")({
   component: SignalsPage,
 });
 
-type Row = ElementDef & { source: string; sourceType: string; on: boolean; weight: number };
+type Row = ElementDef & { source: string; product: string | null; sourceType: string; connected: boolean; on: boolean; weight: number };
 
 function SignalsPage() {
   const ready = useReady();
@@ -44,18 +45,23 @@ function SignalsPage() {
 
   const rows: Row[] = ELEMENTS.map((e) => {
     const src = SOURCES.find((x) => x.id === e.sourceId)!;
-    return { ...e, source: src.name, sourceType: src.kind === "Module" ? "HumanFirewall" : "Integration", on: s.active.has(e.id), weight: ELEMENT_WEIGHTS[e.id]! * 100 };
+    const connected = s.connected.has(src.id);
+    return { ...e, source: src.name, product: src.kind === "Module" ? "HumanFirewall module" : connected ? connectors[src.id]?.vendor ?? null : null, sourceType: src.kind === "Module" ? "HumanFirewall" : "Integration", connected, on: s.active.has(e.id), weight: ELEMENT_WEIGHTS[e.id]! * 100 };
   });
   const maxW = Math.max(...rows.map((r) => r.weight));
   const cols: Column<Row>[] = [
-    { id: "name", header: "Signal", cell: (r) => <span className="font-medium">{r.name}</span>, sort: (r) => r.name },
-    { id: "pillar", header: "Pillar", cell: (r) => r.pillar, sort: (r) => r.pillar },
-    { id: "category", header: "Category", cell: (r) => r.category, sort: (r) => r.category },
-    { id: "source", header: "Source", cell: (r) => <SoftBadge>{r.source}</SoftBadge>, sort: (r) => r.source },
+    { id: "name", header: "Signal", cell: (r) => <span className="flex items-center gap-1.5 font-medium">{r.name}<InfoTip label={r.name} text={`How it is measured: ${SIGNAL_HOW[r.id]}`} /></span>, sort: (r) => r.name },
+    { id: "pillar", header: "Part of the score", cell: (r) => <div><div>{r.pillar}</div><div className="text-xs text-muted-foreground">{r.category}</div></div>, sort: (r) => `${r.pillar} ${r.category}` },
+    { id: "source", header: "Comes from", cell: (r) => (
+      <div className="flex items-center gap-2">
+        <span className={`size-2 shrink-0 rounded-full ${r.connected ? "bg-success" : "bg-muted-foreground/30"}`} aria-hidden />
+        <div className="min-w-0"><div className="truncate">{r.source}</div><div className="truncate text-xs text-muted-foreground">{r.product ?? "Not connected"}</div></div>
+      </div>
+    ), sort: (r) => r.source },
     { id: "weight", header: "Weight", sort: (r) => r.weight, cell: (r) => (
       <span className="flex items-center gap-2"><span className="h-1.5 w-16 rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground" style={{ width: `${(r.weight / maxW) * 100}%` }} /></span><span className="tabular-nums">{r.weight.toFixed(1)}%</span></span>
     ) },
-    { id: "status", header: "Status", cell: (r) => s.connected.has(r.sourceId) ? <StatusBadge on={r.on} onText="Active" offText="Off" /> : <Link to="/vcro/signals/$id" params={{ id: r.sourceId }} className="text-xs font-medium underline underline-offset-2" onClick={(e) => e.stopPropagation()}>Connect {r.source}</Link>, sort: (r) => (r.on ? 1 : 0) },
+    { id: "status", header: "Status", cell: (r) => r.connected ? <StatusBadge on={r.on} onText="In the score" offText="Switched off" /> : <Button asChild variant="outline" size="sm" className="h-7"><Link to="/vcro/signals/$id" params={{ id: r.sourceId }}>Connect</Link></Button>, sort: (r) => (r.on ? 2 : r.connected ? 1 : 0) },
     { id: "switch", header: "Use in score", cell: (r) => (
       <Switch checked={r.on} disabled={!s.connected.has(r.sourceId)} onCheckedChange={(on) => setPending({ next: previewElement(r.id, on), what: `${on ? "Use" : "Stop using"} ${r.name} in the score` })} aria-label={`Use ${r.name} in score`} onClick={(e) => e.stopPropagation()} />
     ) },
@@ -66,7 +72,7 @@ function SignalsPage() {
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader title="Signals" subtitle="What feeds the risk score, and where the score is put to work" action={<Button onClick={() => navigate({ search: { tab: "integrations" } })}><Plus className="size-4" />Add source</Button>} />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard ready={ready} label="Connected sources" icon={Plug} value={`${st.connectedSources} / ${st.totalSources}`} caption={`Feeding the score · ${st.outbound} sending it out`} />
+        <StatCard ready={ready} label="Connected sources" icon={Plug} value={`${st.connectedSources} / ${st.totalSources}`} caption={`Feeding the score · ${st.outbound} acting on it`} />
         <StatCard ready={ready} label="Active signals" icon={Activity} value={`${st.active} / ${st.total}`} caption="Counted in the score" />
         <StatCard ready={ready} label="Score confidence" icon={Gauge} value={`${st.confidence}%`} caption="Share of the model with live data" />
         <StatCard ready={ready} label="Last sync" icon={Clock} value={st.lastSync} caption="Most recent source" />
@@ -93,27 +99,25 @@ function SignalsPage() {
                 <span className="grid size-7 place-items-center rounded-lg bg-muted">{dir === "Signal in" ? <ArrowDownToLine className="size-3.5" /> : <ArrowUpFromLine className="size-3.5" />}</span>
                 <div><h2 className="text-sm font-semibold">{dir === "Signal in" ? "Signals in" : "Actions out"}</h2><p className="text-xs text-muted-foreground">{dir === "Signal in" ? "Data from your security stack that sharpens the score" : "Send the score to the tools that enforce and respond"}</p></div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {integrations.filter((m) => m.direction === dir).map((m) => {
                   const on = s.connected.has(m.id);
                   const gain = sourceGain(s, m.id);
                   const cfg = connectors[m.id];
                   return (
-                    <Link key={m.id} to="/vcro/signals/$id" params={{ id: m.id }}
-                      className="group flex flex-col gap-2 rounded-xl border bg-card p-4 transition hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <div className="flex items-start justify-between gap-2"><span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{m.category}</span><StatusBadge on={on} offText="Available" /></div>
-                      <span className="text-sm font-semibold">{m.name}{on && cfg && <span className="font-normal text-muted-foreground"> · {cfg.vendor}</span>}</span>
-                      <p className="text-xs text-muted-foreground">{m.about}</p>
-                      <div className="flex flex-wrap gap-1">
-                        {dir === "Signal in" ? gain.signals.map((n) => <span key={n} className="rounded-md border bg-muted px-1.5 py-0.5 text-[11px]">{n}</span>)
-                          : m.controls?.map((c) => <span key={c.id} className="rounded-md border bg-muted px-1.5 py-0.5 text-[11px]">{c.name}</span>)}
+                    <div key={m.id} className="group relative flex flex-col rounded-2xl border bg-card p-5 transition hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{m.category}</span>
+                        <StatusBadge on={on} offText="Available" />
                       </div>
-                      {!on && <div className="truncate text-[11px] text-muted-foreground">Works with {m.vendors?.slice(0, 3).join(", ")}{(m.vendors?.length ?? 0) > 3 && ` +${m.vendors!.length - 3}`}</div>}
-                      <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-xs">
-                        <span className="text-muted-foreground">{on ? `Synced ${cfg ? formatStamp(cfg.lastSync) : m.lastSync}` : dir === "Signal in" ? `Confidence ${st.confidence}% → ${gain.confidence}%` : `${m.controls?.length ?? 0} controls`}</span>
-                        <span className="inline-flex items-center gap-1 font-medium">{on ? "Manage" : "Connect"}<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+                      <div className="mt-3 flex items-center gap-1.5 text-base font-semibold">{m.name}
+                        <InfoTip label={m.name} text={`${m.about} ${dir === "Signal in" ? `Brings in: ${gain.signals.join(", ")}.` : `Does: ${m.controls?.map((c) => c.name).join(", ")}.`}`} /></div>
+                      <p className="mt-1 min-h-10 text-sm text-muted-foreground">{on && cfg ? <span className="font-medium text-foreground">{cfg.vendor}</span> : m.vendors?.join(", ")}</p>
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3 text-xs">
+                        <span className="text-muted-foreground">{on ? `Synced ${cfg ? formatStamp(cfg.lastSync) : m.lastSync}` : dir === "Signal in" ? `+${gain.confidence - st.confidence}% confidence · ${gain.signals.length} ${gain.signals.length === 1 ? "signal" : "signals"}` : `${m.controls?.length ?? 0} controls`}</span>
+                        <Link to="/vcro/signals/$id" params={{ id: m.id }} className="inline-flex items-center gap-1 font-semibold after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{on ? "Manage" : "Connect"}<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></Link>
                       </div>
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
@@ -123,13 +127,14 @@ function SignalsPage() {
 
         <TabsContent value="signals" className="mt-4">
           <Card className="p-4 shadow-none">
-            <DataTable rows={rows} columns={cols} getId={(r) => r.id} search={(r) => `${r.name} ${r.category} ${r.source}`} searchPlaceholder="Search signals" pageSizeDefault={25}
-              exportAs={{ name: "vcro-signals", header: ["Signal", "Pillar", "Category", "Source", "Weight %", "Status"], row: (r) => [r.name, r.pillar, r.category, r.source, r.weight.toFixed(1), r.on ? "Active" : s.connected.has(r.sourceId) ? "Off" : "Not connected"] }}
+            <DataTable rows={rows} columns={cols} getId={(r) => r.id} search={(r) => `${r.name} ${r.category} ${r.source} ${r.product ?? ""}`} searchPlaceholder="Search signals, sources or products" pageSizeDefault={25}
+              onRowClick={(r) => r.sourceType === "Integration" && navigate({ to: "/vcro/signals/$id", params: { id: r.sourceId } })}
+              exportAs={{ name: "vcro-signals", header: ["Signal", "Pillar", "Category", "Source", "Product", "Weight %", "Status", "How it is measured"], row: (r) => [r.name, r.pillar, r.category, r.source, r.product, r.weight.toFixed(1), r.on ? "In the score" : r.connected ? "Switched off" : "Not connected", SIGNAL_HOW[r.id]] }}
               filters={[
                 { id: "pillar", label: "Pillar", options: ["Behaviour", "Exposure", "Privilege", "Reporting"], match: (r, v) => r.pillar === v },
                 { id: "category", label: "Category", options: [...new Set(ELEMENTS.map((e) => e.category))], match: (r, v) => r.category === v },
-                { id: "type", label: "Source type", options: ["HumanFirewall", "Integration"], match: (r, v) => r.sourceType === v },
-                { id: "status", label: "Status", options: ["Active", "Inactive"], match: (r, v) => (v === "Active") === r.on },
+                { id: "source", label: "Source", options: SOURCES.filter((x) => x.direction !== "Action out").map((x) => x.name), match: (r, v) => r.source === v },
+                { id: "status", label: "Status", options: ["In the score", "Switched off", "Not connected"], match: (r, v) => (v === "In the score" ? r.on : v === "Switched off" ? r.connected && !r.on : !r.connected) },
               ]} />
           </Card>
         </TabsContent>

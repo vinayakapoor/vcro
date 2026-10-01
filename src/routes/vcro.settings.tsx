@@ -4,14 +4,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PageHeader, Widget } from "@/features/shared/widget";
 import { useReady } from "@/features/shared/prefs";
 import { InfoTip } from "@/features/shared/info";
 import {
-  DEFAULT_SETTINGS, applyState, formatMoney, orgScoreFor, orgSummary, previewConfig, resetVcro, saveSettings, signalStats, useSettings, useSignals,
-  type Currency, type Settings,
+  DEFAULT_SETTINGS, applyState, orgScoreFor, previewConfig, resetVcro, saveSettings, signalStats, useSettings, useSignals,
+  type Settings,
 } from "@/lib/api";
 import { DEFAULT_CONFIG, type ScoringConfig } from "@/lib/scoring";
 
@@ -19,9 +18,9 @@ export const Route = createFileRoute("/vcro/settings")({
   head: () => ({
     meta: [
       { title: "vCRO Settings | HumanFirewall vCRO" },
-      { name: "description", content: "Scoring, alerts, automation, privacy and exposure settings for vCRO." },
+      { name: "description", content: "Scoring, alerts, automation and privacy settings for vCRO." },
       { property: "og:title", content: "vCRO Settings | HumanFirewall vCRO" },
-      { property: "og:description", content: "Scoring, alerts, automation, privacy and exposure settings for vCRO." },
+      { property: "og:description", content: "Scoring, alerts, automation and privacy settings for vCRO." },
       { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     ],
   }),
@@ -65,7 +64,6 @@ function SettingsPage() {
   const dirty = cfgDirty || JSON.stringify(set) !== JSON.stringify(saved);
   const now = ready ? orgScoreFor(sig).score : null;
   const next = ready && cfgDirty ? orgScoreFor(previewConfig(cfg)).score : now;
-  const incidents = ready ? orgSummary(sig).expectedIncidents : 0;
   const c = <K extends keyof ScoringConfig>(k: K, v: number | null) => setCfg({ ...cfg, [k]: v ?? DEFAULT_CONFIG[k] });
   const alertsSet = (p: Partial<Settings["alerts"]>) => setSet({ ...set, alerts: { ...set.alerts, ...p } });
   const autoSet = (p: Partial<Settings["automation"]>) => setSet({ ...set, automation: { ...set.automation, ...p } });
@@ -121,24 +119,6 @@ function SettingsPage() {
           <Row label="Run automatic actions" hint="Low-effort actions like training reminders can run without review" info="Turn off to make every recommended action need approval."><Switch checked={set.automation.autoRun} onCheckedChange={(v) => autoSet({ autoRun: v })} aria-label="Run automatic actions" /></Row>
           <Row label="Approval needed above" hint="Any action reaching more people than this needs approval, even a low-effort one"><Num label="Approval threshold in people" v={set.automation.approvalAbove} set={(n) => autoSet({ approvalAbove: n ?? 0 })} suffix="people" w="w-24" /></Row>
         </div>
-      </Widget>
-
-      <Widget title="Exposure estimate" ready={ready}>
-        <div className="divide-y">
-          <Row label="Currency" hint="Used for the exposure estimate in Reports and the board pack">
-            <ToggleGroup type="single" variant="outline" size="sm" value={set.currency} onValueChange={(v) => v && setSet({ ...set, currency: v as Currency })}>
-              <ToggleGroupItem value="USD">USD</ToggleGroupItem><ToggleGroupItem value="INR">INR</ToggleGroupItem><ToggleGroupItem value="AED">AED</ToggleGroupItem>
-            </ToggleGroup>
-          </Row>
-          <Row label="Cost per incident" hint="Your average cost of one human-caused incident, in the currency above" info="Use your own incident history or insurer figures. Leave empty to hide the exposure estimate everywhere.">
-            <Num label="Cost per incident" v={set.costPerIncident} set={(n) => setSet({ ...set, costPerIncident: n || null })} suffix={set.currency} w="w-32" placeholder="Not set" />
-          </Row>
-        </div>
-        <p className="mt-3 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-          {set.costPerIncident
-            ? <><span className="font-semibold text-foreground">{formatMoney(incidents * set.costPerIncident, set.currency)}</span> = {incidents.toFixed(1)} expected incidents x {formatMoney(set.costPerIncident, set.currency)}. Expected incidents is the sum of score ÷ 100 across High and Critical people. A scenario figure for comparing months, not a loss forecast.</>
-            : "No cost set, so no exposure estimate is shown anywhere in vCRO."}
-        </p>
       </Widget>
 
       <Widget title="Privacy" ready={ready}>

@@ -1,7 +1,7 @@
 // Report builders. Each returns a complete file: a print-ready HTML document or a CSV.
 import { TENANT } from "@/data/catalogue";
 import {
-  awarenessByDept, deptStats, ELEMENTS, ELEMENT_WEIGHTS, fmt, formatAge, formatMoney, getPeople, orgSummary, pct, PREV_MONTH, pseudonym,
+  awarenessByDept, deptStats, ELEMENTS, ELEMENT_WEIGHTS, fmt, formatAge, getPeople, orgSummary, pct, PREV_MONTH, pseudonym,
   recommendedActions, signalStats, SOURCES, trends, weakestSignals, type Settings, type SignalState,
 } from "./api";
 import { BAND_RANGES } from "./scoring";
@@ -55,15 +55,13 @@ ${points.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.score)}" r="2.5" fill="#1
 </svg>`;
 }
 
-function kpis(s: SignalState, set: Settings) {
+function kpis(s: SignalState) {
   const o = orgSummary(s);
   const items: [string, string, string][] = [
     ["High or Critical", fmt(o.highCount), `${pct(o.highShare)} of ${fmt(o.total)} people`],
     ["Report rate", pct(o.reportRate), `Fail rate ${pct(o.failRate)} in simulations`],
     ["Repeat clickers", fmt(o.repeatCount), "2 or more fails in 180 days"],
-    set.costPerIncident
-      ? ["Exposure estimate", formatMoney(o.expectedIncidents * set.costPerIncident, set.currency), `${o.expectedIncidents.toFixed(1)} expected incidents x cost per incident`]
-      : ["Very attacked VIPs", fmt(o.vipAttacked), "Senior and heavily targeted"],
+    ["Very attacked VIPs", fmt(o.vipAttacked), "Senior and heavily targeted"],
   ];
   return `<div class="kpis">${items.map(([k, v, c]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b><small>${esc(c)}</small></div>`).join("")}</div>`;
 }
@@ -81,7 +79,7 @@ function boardPack(s: SignalState, set: Settings): string {
   const depts = [...deptStats(s)].sort((a, b) => b.score - a.score);
   const acts = recommendedActions(s, set.automation).slice(0, 5);
   return page("Board pack", `${hero(s)}
-<h2>Key figures</h2>${kpis(s, set)}
+<h2>Key figures</h2>${kpis(s)}
 <h2>12 month trend</h2>${trendSvg(trends(s).org)}
 <h2>What moved the score since ${PREV_MONTH}</h2>${o.drivers.length ? table([["Driver"], ["Change in points", true]], o.drivers.slice(0, 6).map((d) => [esc(d.category), signed(d.delta)])) : '<p class="note">No driver moved by 0.1 points or more.</p>'}
 <h2>Departments</h2>${table([["Department"], ["Score", true], ["Band"], ["Change", true], ["People", true], ["High or Critical", true], ["Top driver"]], depts.map((d) => [esc(d.department), d.score, pill(d.band), signed(d.change), d.headcount, d.high, esc(d.topDriver)]))}
@@ -95,7 +93,7 @@ function monthly(s: SignalState, set: Settings): string {
   const movers = o.people.filter((p) => p.change !== null && p.change !== 0).sort((a, b) => Math.abs(b.change!) - Math.abs(a.change!)).slice(0, 15);
   const nm = (p: (typeof movers)[number]) => (set.privacy ? pseudonym(p.id) : p.name);
   return page("Monthly risk summary", `${hero(s)}
-<h2>Key figures</h2>${kpis(s, set)}
+<h2>Key figures</h2>${kpis(s)}
 <p class="note">${fmt(o.enteredHigh)} people entered High or Critical since ${PREV_MONTH}; ${fmt(o.leftHigh)} left.</p>
 <h2>Departments by change</h2>${table([["Department"], [PREV_MONTH, true], ["Now", true], ["Change", true], ["Top driver"]], depts.map((d) => [esc(d.department), d.prev, d.score, signed(d.change), esc(d.topDriver)]))}
 <h2>Biggest movers</h2>${movers.length ? table([["Person"], ["Department"], [PREV_MONTH, true], ["Now", true], ["Change", true]], movers.map((p) => [esc(nm(p)), esc(p.department), p.prev!, p.score!, signed(p.change!)])) : '<p class="note">No person moved this month.</p>'}

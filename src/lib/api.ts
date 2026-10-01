@@ -16,15 +16,11 @@ import {
 export type TagEdits = { add: Record<string, Tag[]>; remove: Record<string, Tag[]>; maps: { group: string; tag: Tag }[] };
 const NO_EDITS: TagEdits = { add: {}, remove: {}, maps: [] };
 export type SignalState = { connected: Set<string>; disabled: Set<string>; active: Set<string>; weights: Record<string, number>; config: ScoringConfig; edits: TagEdits };
-export type Currency = "USD" | "INR" | "AED";
 export type Settings = {
   alerts: { enterHigh: boolean; orgRise: number; weekly: boolean; recipients: string };
   automation: { autoRun: boolean; approvalAbove: number };
-  /** In the tenant's chosen currency. Null until the tenant sets it. */
-  costPerIncident: number | null;
   /** Goal line on trend charts. Null until the tenant sets it. */
   targetScore: number | null;
-  currency: Currency;
   privacy: boolean;
   /** Teams smaller than this show no score, so no one can be singled out through a small group. */
   minGroupSize: number;
@@ -51,7 +47,7 @@ function makeSignals(connected: Set<string>, disabled: Set<string>, weights: Rec
 export const DEFAULT_SETTINGS: Settings = {
   alerts: { enterHigh: true, orgRise: 5, weekly: true, recipients: "" },
   automation: { autoRun: true, approvalAbove: 250 },
-  costPerIncident: null, targetScore: null, currency: "USD", privacy: false, minGroupSize: 5,
+  targetScore: null, privacy: false, minGroupSize: 5,
 };
 const DEFAULT_STORE: Store = {
   signals: makeSignals(new Set(SOURCES.filter((s) => s.defaultConnected).map((s) => s.id)), new Set(), {}, DEFAULT_CONFIG, NO_EDITS),
@@ -267,6 +263,12 @@ function readingsAt(p: Person, monthsAgo: number, cfg: ScoringConfig): Readings 
     const list = per[ch];
     if (list) out[SIM_CHANNEL_ELEMENT[ch]] = { value: simulationRisk(list, cfg)! };
   }
+  if (!any && p.sims.length) {
+    // Before the person's first recorded campaign: carry their earliest result back as the baseline.
+    const first = p.sims[p.sims.length - 1]!;
+    out[SIM_CHANNEL_ELEMENT[first.channel]] = { value: simulationRisk([{ ...first, ageDays: 0 }], cfg)! };
+    any = true;
+  }
   if (any) out["sim-repeat"] = { value: Math.min(100, Math.max(0, recentFails - 1) * 25) };
   else { delete out["sim-mfa"]; delete out["sim-callback"]; }
   return out;
@@ -465,8 +467,6 @@ export function orgSummary(s: SignalState) {
       repeatCount: people.filter((p) => p.fails180 >= 2).length,
       vipAttacked: people.filter((p) => p.tags.includes("VIP") && p.tags.includes("Very attacked")).length,
       lowConfidence: sc.filter((p) => p.lowConfidence).length,
-      /** Sum of score / 100 over High and Critical people: the incident count used by the exposure estimate. */
-      expectedIncidents: high.reduce((a, p) => a + p.score! / 100, 0),
       departments: deptStats(s), pareto, drivers,
       concentration: { people: 10, risk: Math.round((sorted.slice(0, topN).reduce((a, b) => a + b, 0) / totalRisk) * 100), count: topN },
       channels: channelStats(allSims), lures: lureStats(allSims), simsLive: allSims.length > 0,
@@ -474,21 +474,23 @@ export function orgSummary(s: SignalState) {
   });
 }
 
-export type TrendPoint = { month: string; score: number; band: Band; delta: number; intervention: string | null };
+export type TrendPoint = { month: string; score: number; /** One decimal, for charts. */ value: number; band: Band; delta: number; intervention: string | null };
 /** Monthly averages for the organisation, each department and each band count. */
 export function trends(s: SignalState) {
   return memo(s, "trends", () => {
     const m = monthly(s, true);
     const people = getPeople(s);
+    /** Average to one decimal, so month-to-month movement shows as a slope and not as steps. */
     const avg = (idx: number[], k: number) => {
       let sum = 0, n = 0;
       for (const i of idx) { const v = m[i * 12 + k]!; if (v >= 0) { sum += v; n++; } }
-      return n ? Math.round(sum / n) : null;
+      return n ? Math.round((sum / n) * 10) / 10 : null;
     };
     const all = people.map((_, i) => i);
     const org: TrendPoint[] = MONTHS.map((month, k) => {
-      const score = avg(all, k) ?? 0;
-      return { month, score, band: bandFor(score), delta: 0, intervention: INTERVENTIONS.find((x) => x.month === month)?.label ?? null };
+      const value = avg(all, k) ?? 0;
+      const score = Math.round(value);
+      return { month, score, value, band: bandFor(score), delta: 0, intervention: INTERVENTIONS.find((x) => x.month === month)?.label ?? null };
     });
     org.forEach((t, k) => { t.delta = k ? t.score - org[k - 1]!.score : 0; });
     return { org, matrix: m, avg };
@@ -688,6 +690,32 @@ export function awarenessByDept(s: SignalState) {
   });
 }
 
+// ---------- Report data ----------
+/** Simulation results per department. */
+export function simsByDept(s: SignalState) {
+  return memo(s, "simsDept", () => DEPARTMENTS.map((d) => {
+    const ps = getPeople(s).filter((p) => p.department === d);
+    const r = rates(ps.flatMap((p) => p.sims));
+    return { department: d, people: ps.length, simulations: r.attempts, failRate: Math.round(r.failRate * 100), reportRate: Math.round(r.reportRate * 100), repeat: ps.filter((p) => p.fails180 >= 2).length, impulsive: ps.filter((p) => p.impulsive).length };
+  }));
+}
+/** How many people sit in each 10-point slice of the scale. */
+export function scoreHistogram(s: SignalState) {
+  return memo(s, "hist", () => {
+    const bins = Array.from({ length: 10 }, (_, i) => ({ range: `${i * 10 + (i ? 1 : 0)} to ${(i + 1) * 10}`, from: i * 10, people: 0, band: bandFor(i * 10 + 5) }));
+    for (const p of getPeople(s)) if (p.score !== null) bins[Math.min(9, Math.max(0, Math.ceil(p.score / 10) - 1))]!.people++;
+    return bins;
+  });
+}
+/** Even axis ticks that always include the data. */
+export function axisFor(values: number[], pad = 3): { domain: [number, number]; ticks: number[] } {
+  if (!values.length) return { domain: [0, 100], ticks: [0, 25, 50, 75, 100] };
+  const lo = Math.max(0, Math.min(...values) - pad), hi = Math.min(100, Math.max(...values) + pad);
+  const step = hi - lo <= 12 ? 2 : hi - lo <= 30 ? 5 : hi - lo <= 60 ? 10 : 20;
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+  return { domain: [a, b], ticks: Array.from({ length: Math.round((b - a) / step) + 1 }, (_, i) => a + i * step) };
+}
+
 // ---------- Tags, groups and watchlists ----------
 export type GroupKind = "who" | "behaviour" | "own";
 export type WatchlistDef = { id: string; name: string; rule: string; kind: GroupKind; custom?: boolean; match: (p: ScoredPerson) => boolean;
@@ -791,11 +819,6 @@ export function managerInvolvement(s: SignalState) {
 // ---------- Formatting ----------
 export const fmt = (n: number) => n.toLocaleString("en-US");
 export const pct = (share: number) => (share > 0 && share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`);
-export function formatMoney(v: number, currency: Currency) {
-  if (currency === "INR") return v >= 1e7 ? `₹ ${(v / 1e7).toFixed(1)} Cr` : v >= 1e5 ? `₹ ${(v / 1e5).toFixed(1)} L` : `₹ ${fmt(Math.round(v))}`;
-  const sym = currency === "USD" ? "$" : "AED ";
-  return v >= 1e6 ? `${sym}${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${sym}${Math.round(v / 1e3)}K` : `${sym}${Math.round(v)}`;
-}
 export function formatAge(ageDays: number | null) {
   if (ageDays === null) return "None";
   return new Date(TODAY.getTime() - ageDays * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -805,6 +828,7 @@ export const pseudonym = (id: string) => `Employee ${id.slice(1)}`;
 export const initials = (name: string) => name.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase();
 
 export const PREV_MONTH = MONTHS[10]!;
+export { SIGNAL_HOW } from "@/data/catalogue";
 export { ELEMENTS, SOURCES, MONTHS, DEPARTMENTS, LOCATIONS, CHANNELS, LURES, TEMPLATES, WORKFLOWS };
 export { DIRECTORY_GROUPS, TAGS, groupMembers };
 export type { Tag, Department, Band, Channel, Lure };

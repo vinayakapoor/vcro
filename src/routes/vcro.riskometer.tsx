@@ -14,9 +14,9 @@ import { download } from "@/lib/export";
 export const Route = createFileRoute("/vcro/riskometer")({
   head: () => ({
     meta: [
-      { title: "Riskometer | HumanFirewall vCRO" },
+      { title: "Organisation Risk Score | HumanFirewall vCRO" },
       { name: "description", content: "Organisation human risk score across every channel, with trend, drivers and actions." },
-      { property: "og:title", content: "Riskometer | HumanFirewall vCRO" },
+      { property: "og:title", content: "Organisation Risk Score | HumanFirewall vCRO" },
       { property: "og:description", content: "Organisation human risk score across every channel, with trend, drivers and actions." },
     ],
   }),
@@ -42,8 +42,8 @@ function RiskometerPage() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader
-        title="Riskometer"
-        subtitle={`Human risk across ${fmt(s.total)} people, in one score`}
+        title="Organisation Risk Score - vCRO"
+        subtitle="A detailed report showcasing the Risk Score of the organisation and how different departments and users are influencing it."
         action={<Button onClick={exportPack}><Download className="size-4" />Export board pack</Button>}
       />
 
