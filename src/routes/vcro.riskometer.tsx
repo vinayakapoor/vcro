@@ -1,14 +1,15 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Crosshair, Download, Landmark, ShieldCheck, UserRoundX } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { BellRing, Crosshair, Download, Repeat, ShieldCheck, UserRoundX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageHeader, StatCard } from "@/features/shared/widget";
-import { usePrefs, useReady } from "@/features/shared/prefs";
+import { useReady } from "@/features/shared/prefs";
 import {
   ActionsCard, ConcentrationCard, RiskSpreadingCard, HeatmapCard, SignalsCard, WeakestSignalsCard, MatrixCard, MoversCard, RiskometerCard, SusceptibilityCard, TreemapCard, TrendCard,
 } from "@/features/riskometer/widgets";
-import { deptHeatmap, managerInvolvement, riskSpreaders, formatMoney, orgSummary, signalCoverage, useSignals, weakestSignals } from "@/lib/api";
+import { addReport, alerts, deptHeatmap, fmt, managerInvolvement, orgSummary, pct, riskSpreaders, signalCoverage, useSettings, useSignals, weakestSignals } from "@/lib/api";
+import { buildReport } from "@/lib/reports";
+import { download } from "@/lib/export";
 
 export const Route = createFileRoute("/vcro/riskometer")({
   head: () => ({
@@ -25,48 +26,62 @@ export const Route = createFileRoute("/vcro/riskometer")({
 function RiskometerPage() {
   const ready = useReady();
   const sig = useSignals();
+  const settings = useSettings();
   const s = orgSummary(sig);
   const cov = signalCoverage(sig);
-  const { currency, setCurrency } = usePrefs();
   const navigate = useNavigate();
+  const notices = ready ? alerts(sig, settings) : [];
+
+  const exportPack = () => {
+    const f = buildReport("board", sig, settings);
+    download(f.filename, f.mime, f.content);
+    addReport({ template: "board", name: "Board pack", score: s.score, ...f });
+    toast.success("Board pack downloaded", { description: "Open the file and print to PDF. A copy is kept under Reports." });
+  };
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader
         title="Riskometer"
-        subtitle="Human risk across every channel, in one score"
-        action={<Button onClick={() => toast("Board pack export started")}><Download className="size-4" />Export board pack</Button>}
+        subtitle={`Human risk across ${fmt(s.total)} people, in one score`}
+        action={<Button onClick={exportPack}><Download className="size-4" />Export board pack</Button>}
       />
+
+      {notices.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-warning/30 bg-warning/5 px-4 py-2.5 text-sm">
+          <BellRing className="size-4 shrink-0 text-warning" aria-hidden />
+          {notices.map((n) => (
+            <Link key={n.id} to="/vcro/people" search={n.to === "people" ? { move: "Entered High or Critical" } : { move: "Rising" }} className="font-medium underline-offset-2 hover:underline">{n.text}</Link>
+          ))}
+          <Link to="/vcro/settings" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline">Alert settings</Link>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-12">
         <RiskometerCard s={s} ready={ready} />
         <div className="flex flex-col gap-4 lg:col-span-7">
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <StatCard ready={ready} label="High or Critical" icon={UserRoundX} value={`${s.highCount} people`} caption={`${Math.round(s.highShare * 100)}% of workforce`} />
-          <StatCard ready={ready} label="Report-to-fail ratio" icon={ShieldCheck} value={s.rtf === null ? "None" : s.rtf.toFixed(1)} caption="Reports per failure" />
-          <StatCard ready={ready} label="Financial exposure" icon={Landmark} value={formatMoney(s.lossInr, currency)} caption="Estimated annual"
-            headerExtra={
-              <ToggleGroup type="single" size="sm" value={currency} onValueChange={(v) => v && setCurrency(v as "INR" | "AED")} aria-label="Currency" className="h-6">
-                <ToggleGroupItem value="INR" className="h-6 px-1.5 text-[11px]">INR</ToggleGroupItem>
-                <ToggleGroupItem value="AED" className="h-6 px-1.5 text-[11px]">AED</ToggleGroupItem>
-              </ToggleGroup>
-            } />
-          <StatCard ready={ready} label="Very attacked VIPs" icon={Crosshair} value={`${s.vipAttacked} people`} caption="Targeted and privileged"
-            onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "very-attacked-vips" } })} />
-        </div>
-        <SignalsCard ready={ready} cov={cov} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <StatCard ready={ready} label="High or Critical" icon={UserRoundX} value={fmt(s.highCount)} caption={`${pct(s.highShare)} of people · ${fmt(s.enteredHigh)} new this month`}
+              onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "top-risk" } })} />
+            <StatCard ready={ready} label="Report rate" icon={ShieldCheck} value={pct(s.reportRate)} caption={`of simulated attacks reported · ${pct(s.failRate)} failed`} />
+            <StatCard ready={ready} label="Repeat clickers" icon={Repeat} value={fmt(s.repeatCount)} caption="Failed 2 or more simulations in 180 days"
+              onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "repeat-clickers" } })} />
+            <StatCard ready={ready} label="Very attacked VIPs" icon={Crosshair} value={fmt(s.vipAttacked)} caption="Senior people who are heavily targeted"
+              onClick={() => navigate({ to: "/vcro/watchlists", search: { group: "very-attacked-vips" } })} />
+          </div>
+          <SignalsCard ready={ready} cov={cov} />
         </div>
 
-        <TrendCard s={s} ready={ready} />
+        <TrendCard ready={ready} />
         <MoversCard s={s} ready={ready} />
         <MatrixCard s={s} ready={ready} />
         <SusceptibilityCard s={s} ready={ready} />
         <HeatmapCard ready={ready} rows={deptHeatmap(sig)} className="lg:col-span-12" />
         <TreemapCard s={s} ready={ready} />
-        <WeakestSignalsCard ready={ready} items={weakestSignals(sig, s.people)} className="lg:col-span-5" />
+        <WeakestSignalsCard ready={ready} items={weakestSignals(sig)} className="lg:col-span-5" />
         <ConcentrationCard s={s} ready={ready} />
         <ActionsCard ready={ready} />
-        <RiskSpreadingCard ready={ready} spreaders={riskSpreaders(sig, s.people)} managers={managerInvolvement(sig, s.people)} className="lg:col-span-12" />
+        <RiskSpreadingCard ready={ready} spreaders={riskSpreaders(sig)} managers={managerInvolvement(sig)} className="lg:col-span-12" />
       </div>
     </div>
   );

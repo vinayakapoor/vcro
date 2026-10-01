@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { InfoTip } from "./info";
 
 export function Widget({
-  title, action, ready, empty, notConnected, children, className,
+  title, action, ready, empty, notConnected, children, className, contentClassName,
 }: {
   title: ReactNode;
   action?: ReactNode;
@@ -17,6 +17,7 @@ export function Widget({
   notConnected?: boolean;
   children: ReactNode;
   className?: string | undefined;
+  contentClassName?: string | undefined;
 }) {
   return (
     <Card className={cn("min-w-0 gap-3 rounded-xl py-4 shadow-[0_1px_2px_0_color-mix(in_oklab,var(--foreground)_6%,transparent)] transition-shadow hover:shadow-[0_4px_16px_-6px_color-mix(in_oklab,var(--foreground)_14%,transparent)]", className)}>
@@ -24,7 +25,7 @@ export function Widget({
         <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">{title}{typeof title === "string" && <InfoTip label={title} />}</CardTitle>
         {action}
       </CardHeader>
-      <CardContent className="min-w-0 px-4">
+      <CardContent className={cn("min-w-0 px-4", contentClassName)}>
         {!ready ? (
           <div className="space-y-2"><Skeleton className="h-6 w-1/3" /><Skeleton className="h-32 w-full" /></div>
         ) : notConnected ? (

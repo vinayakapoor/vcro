@@ -1,6 +1,8 @@
 import type { Channel, ElementDef, Lure, Payload } from "@/lib/scoring";
 
 export type IntegrationCategory = "Identity" | "Endpoint" | "Data" | "Web" | "Email" | "HR" | "OSINT" | "AI identities";
+/** Signal in: data that feeds the score. Action out: the score drives a control in another system. */
+export type Direction = "Signal in" | "Action out";
 
 export type Source = {
   id: string;
@@ -88,6 +90,26 @@ export const ELEMENTS: ElementDef[] = [
   e("prv-network", "Network centrality", "Privilege", "Seniority and network centrality", "recipients"),
 ];
 
+/**
+ * Connector categories designed into the model but not yet shipped. They carry no weight and do not
+ * affect confidence until they move into SOURCES and ELEMENTS.
+ */
+export type PlannedConnector = { id: string; name: string; category: string; direction: Direction; adds: string[] };
+export const PLANNED_CONNECTORS: PlannedConnector[] = [
+  { id: "plan-collab", name: "Collaboration and chat", category: "Collaboration", direction: "Signal in", adds: ["Chat phishing clicked", "Chat phishing reported", "External guest sharing"] },
+  { id: "plan-browser", name: "Managed browser", category: "Browser", direction: "Signal in", adds: ["Risky extensions", "Sensitive data pasted into GenAI", "Password reuse on unknown sites"] },
+  { id: "plan-password", name: "Password manager", category: "Identity", direction: "Signal in", adds: ["Weak or reused passwords", "Vault adoption"] },
+  { id: "plan-pam", name: "Privileged access management", category: "Identity", direction: "Signal in", adds: ["Standing privilege", "Privileged session anomalies"] },
+  { id: "plan-mdm", name: "Device management", category: "Endpoint", direction: "Signal in", adds: ["Device compliance", "Unpatched personal devices"] },
+  { id: "plan-agents", name: "AI agent inventory", category: "AI identities", direction: "Signal in", adds: ["Agents owned per person", "Agent permissions", "Agent prompt-injection test results"] },
+  { id: "plan-third", name: "Contractor and third-party directory", category: "HR", direction: "Signal in", adds: ["Contractor flag", "Access outliving contract"] },
+  { id: "plan-access", name: "Conditional access", category: "Identity", direction: "Action out", adds: ["Step-up sign-in for High and Critical people", "Session limits for watchlists"] },
+  { id: "plan-mailpolicy", name: "Email policy", category: "Email", direction: "Action out", adds: ["Stricter filtering for very attacked people", "External sender banners by risk band"] },
+  { id: "plan-siem", name: "SIEM and SOAR", category: "Security operations", direction: "Action out", adds: ["Score and band on every alert", "Score change events"] },
+  { id: "plan-itsm", name: "Ticketing", category: "Security operations", direction: "Action out", adds: ["Ticket per approved action", "Evidence attached on close"] },
+  { id: "plan-api", name: "Score API and BI export", category: "Data", direction: "Action out", adds: ["Scores by person, team and department", "Scheduled warehouse export"] },
+];
+
 /** Which simulation channel feeds each simulation element. */
 export const SIM_ELEMENT_CHANNEL: Record<string, Channel> = {
   "sim-email": "Email", "sim-vish": "Voice", "sim-smish": "SMS", "sim-qr": "QR", "sim-deepfake": "Deepfake",
@@ -127,6 +149,7 @@ export const LOCATIONS = ["Gurugram", "Mumbai", "Bengaluru", "Dubai", "Abu Dhabi
 export const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct"];
 export const TODAY = new Date(Date.UTC(2026, 9, 1));
 
+export const TENANT = "Demo Enterprise";
 export const TOTAL_EMPLOYEES = 5200;
 export const HEADCOUNT: Record<Department, number> = {
   Finance: 420, HR: 260, IT: 380, Engineering: 1150, Sales: 860, Operations: 720, Legal: 110,

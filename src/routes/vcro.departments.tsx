@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -9,7 +9,8 @@ import { PageHeader, StatCard, Widget } from "@/features/shared/widget";
 import { useReady } from "@/features/shared/prefs";
 import { BAND_VAR, BandBadge, DeltaBadge } from "@/features/shared/band";
 import { HeatmapCard } from "@/features/riskometer/widgets";
-import { awarenessByDept, deptHeatmap, orgSummary, useSignals } from "@/lib/api";
+import { awarenessByDept, deptHeatmap, fmt, orgSummary, teamStats, useSignals } from "@/lib/api";
+import { usePrefs } from "@/features/shared/prefs";
 
 export const Route = createFileRoute("/vcro/departments")({
   head: () => ({
@@ -42,6 +43,8 @@ function DepartmentsPage() {
   const [bands, setBands] = useState<string[]>([]);
   const [sort, setSort] = useState("score");
   const [trend, setTrend] = useState("all");
+  const [open, setOpen] = useState<string | null>(null);
+  const { privacy } = usePrefs();
   const depts = [...s.departments].sort((a, b) => b.score - a.score);
   const SORTS: Record<string, (a: (typeof depts)[number], b: (typeof depts)[number]) => number> = {
     score: (a, b) => b.score - a.score, change: (a, b) => b.change - a.change, headcount: (a, b) => b.headcount - a.headcount,
@@ -59,9 +62,9 @@ function DepartmentsPage() {
       <PageHeader title="Departments" subtitle="Risk, drivers and awareness for every team" />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard ready={ready} label="Highest risk" icon={TriangleAlert} value={worst?.department ?? "None"} caption={worst ? `Score ${worst.score} · ${worst.band}` : ""} />
-        <StatCard ready={ready} label="Most improved" icon={TrendingDown} value={improved?.department ?? "None"} caption={improved ? `${improved.change} pts vs last month` : ""} />
-        <StatCard ready={ready} label="Training completion" icon={GraduationCap} value={`${avgCompletion}%`} caption={`${overdue} people overdue in sample`} />
-        <StatCard ready={ready} label="Departments" icon={Building2} value={depts.length} caption={`${s.people.length} people scored in sample`} />
+        <StatCard ready={ready} label="Most improved" icon={TrendingDown} value={improved?.department ?? "None"} caption={improved ? (improved.change < 0 ? `${improved.change} pts vs last month` : "No department improved this month") : ""} />
+        <StatCard ready={ready} label="Training completion" icon={GraduationCap} value={`${avgCompletion}%`} caption={`${fmt(overdue)} people overdue`} />
+        <StatCard ready={ready} label="Departments" icon={Building2} value={depts.length} caption={`${fmt(s.scored)} of ${fmt(s.total)} people scored`} />
       </div>
 
       <Widget title="Department scorecard" ready={ready}>
@@ -75,13 +78,14 @@ function DepartmentsPage() {
           <span className="ml-auto text-xs text-muted-foreground">{shown.length} of {depts.length} departments</span>
         </div>
         <div className="-mx-4 overflow-x-auto px-4">
-          <table className="w-full min-w-[880px] text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Department</th>
                 <th className="py-2 pr-3 font-medium">Score</th>
                 <th className="py-2 pr-3 font-medium">Change</th>
-                <th className="py-2 pr-3 font-medium">Headcount</th>
+                <th className="py-2 pr-3 font-medium">People</th>
+                <th className="py-2 pr-3 font-medium">High or Critical</th>
                 <th className="py-2 pr-3 font-medium">Top driver</th>
                 <th className="py-2 pr-3 font-medium">Training complete</th>
                 <th className="py-2 pr-3 font-medium">JIT response</th>
@@ -90,25 +94,56 @@ function DepartmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {!shown.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No departments match these filters</td></tr>}
+              {!shown.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">No departments match these filters</td></tr>}
               {shown.map((d) => {
                 const a = aw[d.department]!;
+                const isOpen = open === d.department;
+                const teams = isOpen ? teamStats(sig, d.department) : [];
                 return (
-                  <tr key={d.department} tabIndex={0} className="cursor-pointer border-b last:border-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                  <Fragment key={d.department}>
+                  <tr tabIndex={0} className="cursor-pointer border-b hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
                     onClick={() => navigate({ to: "/vcro/people", search: { dept: d.department } })}
                     onKeyDown={(e) => e.key === "Enter" && navigate({ to: "/vcro/people", search: { dept: d.department } })}>
                     <td className="py-2.5 pr-3 font-medium">
-                      <span className="inline-flex items-center gap-2"><span className="h-6 w-1 rounded-full" style={{ background: BAND_VAR[d.band] }} />{d.department}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <button type="button" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} teams in ${d.department}`}
+                          className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={(e) => { e.stopPropagation(); setOpen(isOpen ? null : d.department); }} onKeyDown={(e) => e.stopPropagation()}>
+                          <ChevronRight className={`size-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                        </button>
+                        <span className="h-6 w-1 rounded-full" style={{ background: BAND_VAR[d.band] }} />{d.department}
+                      </span>
                     </td>
                     <td className="py-2.5 pr-3"><BandBadge band={d.band} score={d.score} /></td>
                     <td className="py-2.5 pr-3"><DeltaBadge value={d.change} /></td>
-                    <td className="py-2.5 pr-3 tabular-nums">{d.headcount.toLocaleString("en-IN")}</td>
+                    <td className="py-2.5 pr-3 tabular-nums">{fmt(d.headcount)}</td>
+                    <td className="py-2.5 pr-3 tabular-nums">{fmt(d.high)}</td>
                     <td className="py-2.5 pr-3 text-muted-foreground">{d.topDriver}</td>
                     <td className="py-2.5 pr-3"><Meter value={a.completion} tone="var(--band-low)" /></td>
                     <td className="py-2.5 pr-3"><Meter value={a.jit} tone="var(--band-guarded)" /></td>
                     <td className="py-2.5 pr-3"><Meter value={a.policy} tone="var(--chart-2)" /></td>
                     <td className="py-2.5"><Meter value={a.reportRate} tone="var(--band-low)" /></td>
                   </tr>
+                  {isOpen && (
+                    <tr className="border-b bg-muted/30">
+                      <td colSpan={10} className="px-3 py-3">
+                        <div className="mb-2 flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                          <span><span className="font-semibold text-foreground">{teams.length} teams</span> in {d.department}, riskiest first. A team is a manager and their direct reports.</span>
+                        </div>
+                        <div className="grid max-h-80 gap-1.5 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+                          {teams.map((t) => (
+                            <button key={t.managerId} type="button" onClick={() => navigate({ to: "/vcro/people", search: { dept: d.department, team: t.managerId } })}
+                              className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-left hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{privacy ? `Team ${t.managerId.slice(1)}` : `${t.manager}'s team`}</span><span className="block truncate text-xs text-muted-foreground">{t.role} · {t.size} people · {t.high} High or Critical</span></span>
+                              <BandBadge band={t.band} score={t.scored ? t.score : null} />
+                              {t.scored > 0 && <DeltaBadge value={t.change} />}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

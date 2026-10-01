@@ -1,23 +1,27 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PageHeader, Widget } from "@/features/shared/widget";
-import { usePrefs, useReady } from "@/features/shared/prefs";
+import { useReady } from "@/features/shared/prefs";
 import { InfoTip } from "@/features/shared/info";
-import { signalStats, useSignals } from "@/lib/api";
-import { HALF_LIFE_DAYS, IMPULSIVE_SECONDS, SIM_CAMPAIGN_WINDOW } from "@/lib/scoring";
+import {
+  DEFAULT_SETTINGS, applyState, formatMoney, orgScoreFor, orgSummary, previewConfig, resetVcro, saveSettings, signalStats, useSettings, useSignals,
+  type Currency, type Settings,
+} from "@/lib/api";
+import { DEFAULT_CONFIG, type ScoringConfig } from "@/lib/scoring";
 
 export const Route = createFileRoute("/vcro/settings")({
   head: () => ({
     meta: [
       { title: "vCRO Settings | HumanFirewall vCRO" },
-      { name: "description", content: "Scoring, alerts, automation, privacy and financial exposure settings for vCRO." },
+      { name: "description", content: "Scoring, alerts, automation, privacy and exposure settings for vCRO." },
       { property: "og:title", content: "vCRO Settings | HumanFirewall vCRO" },
-      { property: "og:description", content: "Scoring, alerts, automation, privacy and financial exposure settings for vCRO." },
+      { property: "og:description", content: "Scoring, alerts, automation, privacy and exposure settings for vCRO." },
       { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     ],
   }),
@@ -32,62 +36,123 @@ function Row({ label, hint, children, info }: { label: string; hint: string; chi
     </div>
   );
 }
-const Num = ({ v, set, suffix, w = "w-20" }: { v: number; set: (n: number) => void; suffix: string; w?: string }) => (
-  <span className="flex items-center gap-2"><Input type="number" min={0} value={v} onChange={(e) => set(Math.max(0, Number(e.target.value)))} className={`${w} text-right tabular-nums`} /><span className="text-xs text-muted-foreground">{suffix}</span></span>
-);
+function Num({ v, set, suffix, w = "w-20", min = 0, max, label, placeholder }: { v: number | null; set: (n: number | null) => void; suffix: string; w?: string; min?: number; max?: number; label: string; placeholder?: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <Input type="number" inputMode="numeric" min={min} max={max} value={v ?? ""} placeholder={placeholder} aria-label={label} className={`${w} text-right tabular-nums`}
+        onChange={(e) => {
+          if (e.target.value === "") return set(placeholder ? null : min);
+          const n = Math.round(Number(e.target.value));
+          if (Number.isFinite(n)) set(Math.max(min, max === undefined ? n : Math.min(max, n)));
+        }} />
+      <span className="w-16 text-xs text-muted-foreground">{suffix}</span>
+    </span>
+  );
+}
 
 function SettingsPage() {
   const ready = useReady();
-  const { currency, setCurrency, privacy, setPrivacy } = usePrefs();
   const sig = useSignals();
+  const saved = useSettings();
   const st = signalStats(sig);
   const custom = Object.keys(sig.weights).length > 0;
-  const [cfg, setCfg] = useState({ halfLife: HALF_LIFE_DAYS, window: SIM_CAMPAIGN_WINDOW, impulsive: IMPULSIVE_SECONDS, enterHigh: true, orgRise: 5, weekly: true, autoRun: true, approvalAbove: 25, costPerIncident: 120000, minConfidence: 60 });
-  const set = <K extends keyof typeof cfg>(k: K, v: (typeof cfg)[K]) => setCfg({ ...cfg, [k]: v });
+  const [cfg, setCfg] = useState<ScoringConfig>(sig.config);
+  const [set, setSet] = useState<Settings>(saved);
+  useEffect(() => setCfg(sig.config), [sig.config]);
+  useEffect(() => setSet(saved), [saved]);
+
+  const cfgDirty = JSON.stringify(cfg) !== JSON.stringify(sig.config);
+  const dirty = cfgDirty || JSON.stringify(set) !== JSON.stringify(saved);
+  const now = ready ? orgScoreFor(sig).score : null;
+  const next = ready && cfgDirty ? orgScoreFor(previewConfig(cfg)).score : now;
+  const incidents = ready ? orgSummary(sig).expectedIncidents : 0;
+  const c = <K extends keyof ScoringConfig>(k: K, v: number | null) => setCfg({ ...cfg, [k]: v ?? DEFAULT_CONFIG[k] });
+  const alertsSet = (p: Partial<Settings["alerts"]>) => setSet({ ...set, alerts: { ...set.alerts, ...p } });
+  const autoSet = (p: Partial<Settings["automation"]>) => setSet({ ...set, automation: { ...set.automation, ...p } });
+
+  const save = () => {
+    if (cfgDirty) applyState(previewConfig(cfg));
+    saveSettings(set);
+    toast.success("vCRO settings saved", cfgDirty && now !== next ? { description: `Scoring changed. Organisation score ${now} → ${next} on every page.` } : undefined);
+  };
+
   return (
     <div className="mx-auto max-w-[1000px] space-y-6">
-      <PageHeader title="vCRO Settings" subtitle="How risk is scored, alerted and acted on" action={<Button onClick={() => toast.success("vCRO settings saved")}>Save settings</Button>} />
+      <PageHeader title="vCRO Settings" subtitle="How risk is scored, alerted and acted on"
+        action={
+          <div className="flex items-center gap-2">
+            {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
+            <Button variant="outline" disabled={!dirty} onClick={() => { setCfg(sig.config); setSet(saved); }}>Discard</Button>
+            <Button disabled={!dirty} onClick={save}>Save settings</Button>
+          </div>
+        } />
 
       <Widget title="Scoring model" ready={ready}>
         <div className="divide-y">
           <Row label="Weights" hint={custom ? "Custom weights applied" : "Default weights"}><Button asChild size="sm" variant="outline"><Link to="/vcro/weightage">Edit weights</Link></Button></Row>
           <Row label="Signals" hint={`${st.active} of ${st.total} signals live · confidence ${st.confidence}%`}><Button asChild size="sm" variant="outline"><Link to="/vcro/signals">Manage signals</Link></Button></Row>
-          <Row label="Signal half-life" hint="Older events count less over time" info="An event loses half its weight after this many days, so recent behaviour matters most."><Num v={cfg.halfLife} set={(n) => set("halfLife", n)} suffix="days" /></Row>
-          <Row label="Simulation window" hint="Recent campaigns counted per person"><Num v={cfg.window} set={(n) => set("window", n)} suffix="campaigns" /></Row>
-          <Row label="Impulsive click" hint="Clicks faster than this are flagged"><Num v={cfg.impulsive} set={(n) => set("impulsive", n)} suffix="seconds" /></Row>
-          <Row label="Minimum confidence to show a score" hint="Below this, scores show as low confidence" info="Protects you from acting on a score that has too little data behind it."><Num v={cfg.minConfidence} set={(n) => set("minConfidence", Math.min(100, n))} suffix="%" /></Row>
+          <Row label="Signal half-life" hint="Older events count less over time" info="An event loses half its weight after this many days, so recent behaviour matters most. Applies to simulations and real-world incidents."><Num label="Signal half-life in days" v={cfg.halfLifeDays} set={(n) => c("halfLifeDays", n)} suffix="days" min={7} max={720} /></Row>
+          <Row label="Simulation window" hint="Most recent campaigns counted per channel, per person" info="A person's simulation risk on each channel uses only their latest campaigns, so one old mistake does not follow them forever."><Num label="Simulation window in campaigns" v={cfg.simWindow} set={(n) => c("simWindow", n)} suffix="campaigns" min={1} max={12} /></Row>
+          <Row label="Impulsive click" hint="A failed simulation faster than this marks the person as an impulsive clicker" info="Feeds the Impulsive clickers watchlist."><Num label="Impulsive click in seconds" v={cfg.impulsiveSeconds} set={(n) => c("impulsiveSeconds", n)} suffix="seconds" min={1} max={600} /></Row>
+          <Row label="Minimum confidence" hint="Scores with less data behind them are marked provisional" info="A person's confidence is the share of the model fed by live signals for them. Provisional scores show with a dashed outline."><Num label="Minimum confidence percent" v={cfg.minConfidence} set={(n) => c("minConfidence", n)} suffix="%" max={100} /></Row>
         </div>
+        {cfgDirty && <p className="mt-3 rounded-lg bg-muted/50 p-3 text-sm"><span className="font-semibold tabular-nums">Organisation score {now} → {next}</span><span className="text-muted-foreground"> with these scoring settings. Every page updates when you save.</span></p>}
+      </Widget>
+
+      <Widget title="Goals" ready={ready}>
+        <Row label="Target score" hint="Shown as a goal line on the Risk trend chart" info="The organisation score you are working towards. Leave empty for no target.">
+          <Num label="Target score" v={set.targetScore} set={(n) => setSet({ ...set, targetScore: n })} suffix="of 100" max={100} placeholder="None" />
+        </Row>
       </Widget>
 
       <Widget title="Alerts" ready={ready}>
         <div className="divide-y">
-          <Row label="Person enters High or Critical" hint="Alert the security team the same day"><Switch checked={cfg.enterHigh} onCheckedChange={(v) => set("enterHigh", v)} aria-label="Person enters High or Critical" /></Row>
-          <Row label="Organisation score rises by" hint="Compared with last month"><Num v={cfg.orgRise} set={(n) => set("orgRise", n)} suffix="pts" /></Row>
-          <Row label="Weekly risk digest" hint="Summary of movers, watchlists and actions"><Switch checked={cfg.weekly} onCheckedChange={(v) => set("weekly", v)} aria-label="Weekly risk digest" /></Row>
+          <Row label="People entering High or Critical" hint="Flag on the Riskometer when anyone crosses into High or Critical in a month"><Switch checked={set.alerts.enterHigh} onCheckedChange={(v) => alertsSet({ enterHigh: v })} aria-label="People entering High or Critical" /></Row>
+          <Row label="Organisation score rises by" hint="Flag when the score rises this much against last month. 0 turns it off."><Num label="Organisation score rise in points" v={set.alerts.orgRise} set={(n) => alertsSet({ orgRise: n ?? 0 })} suffix="pts" max={50} /></Row>
+          <Row label="Weekly risk digest" hint="Email summary of movers, watchlists and actions to vCRO admins" info="Delivery is handled by the platform's notification service; this switch records your preference."><Switch checked={set.alerts.weekly} onCheckedChange={(v) => alertsSet({ weekly: v })} aria-label="Weekly risk digest" /></Row>
         </div>
       </Widget>
 
       <Widget title="Automation" ready={ready}>
         <div className="divide-y">
-          <Row label="Run automatic actions" hint="Low-effort actions like training nudges run without review" info="Turn off to make every recommended action need approval."><Switch checked={cfg.autoRun} onCheckedChange={(v) => set("autoRun", v)} aria-label="Run automatic actions" /></Row>
-          <Row label="Approval needed above" hint="Actions reaching more people than this need approval"><Num v={cfg.approvalAbove} set={(n) => set("approvalAbove", n)} suffix="people" /></Row>
+          <Row label="Run automatic actions" hint="Low-effort actions like training reminders can run without review" info="Turn off to make every recommended action need approval."><Switch checked={set.automation.autoRun} onCheckedChange={(v) => autoSet({ autoRun: v })} aria-label="Run automatic actions" /></Row>
+          <Row label="Approval needed above" hint="Any action reaching more people than this needs approval, even a low-effort one"><Num label="Approval threshold in people" v={set.automation.approvalAbove} set={(n) => autoSet({ approvalAbove: n ?? 0 })} suffix="people" w="w-24" /></Row>
         </div>
       </Widget>
 
-      <Widget title="Financial exposure" ready={ready}>
+      <Widget title="Exposure estimate" ready={ready}>
         <div className="divide-y">
-          <Row label="Currency" hint="Shown on the Riskometer and in reports">
-            <ToggleGroup type="single" variant="outline" size="sm" value={currency} onValueChange={(v) => v && setCurrency(v as "INR" | "AED")}>
-              <ToggleGroupItem value="INR">INR</ToggleGroupItem><ToggleGroupItem value="AED">AED</ToggleGroupItem>
+          <Row label="Currency" hint="Used for the exposure estimate in Reports and the board pack">
+            <ToggleGroup type="single" variant="outline" size="sm" value={set.currency} onValueChange={(v) => v && setSet({ ...set, currency: v as Currency })}>
+              <ToggleGroupItem value="USD">USD</ToggleGroupItem><ToggleGroupItem value="INR">INR</ToggleGroupItem><ToggleGroupItem value="AED">AED</ToggleGroupItem>
             </ToggleGroup>
           </Row>
-          <Row label="Cost per incident" hint="Average cost of one human-caused incident in INR" info="Used to estimate financial exposure. Set it to your own incident cost history."><Num v={cfg.costPerIncident} set={(n) => set("costPerIncident", n)} suffix="INR" w="w-28" /></Row>
+          <Row label="Cost per incident" hint="Your average cost of one human-caused incident, in the currency above" info="Use your own incident history or insurer figures. Leave empty to hide the exposure estimate everywhere.">
+            <Num label="Cost per incident" v={set.costPerIncident} set={(n) => setSet({ ...set, costPerIncident: n || null })} suffix={set.currency} w="w-32" placeholder="Not set" />
+          </Row>
         </div>
+        <p className="mt-3 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+          {set.costPerIncident
+            ? <><span className="font-semibold text-foreground">{formatMoney(incidents * set.costPerIncident, set.currency)}</span> = {incidents.toFixed(1)} expected incidents x {formatMoney(set.costPerIncident, set.currency)}. Expected incidents is the sum of score ÷ 100 across High and Critical people. A scenario figure for comparing months, not a loss forecast.</>
+            : "No cost set, so no exposure estimate is shown anywhere in vCRO."}
+        </p>
       </Widget>
 
       <Widget title="Privacy" ready={ready}>
-        <Row label="Pseudonymise people" hint="Show employee numbers instead of names across vCRO" info="Useful when presenting or under works-council rules. Scores and actions stay the same.">
-          <Switch checked={privacy} onCheckedChange={setPrivacy} aria-label="Pseudonymise people" />
+        <Row label="Pseudonymise people" hint="Show employee numbers instead of names across vCRO and in exports" info="Useful when presenting or under works-council rules. Scores and actions stay the same.">
+          <Switch checked={set.privacy} onCheckedChange={(v) => setSet({ ...set, privacy: v })} aria-label="Pseudonymise people" />
+        </Row>
+      </Widget>
+
+      <Widget title="Reset" ready={ready}>
+        <Row label="Restore vCRO defaults" hint="Clears custom weights, signal switches, settings, your watchlists, pinned people, queued actions and generated reports">
+          <AlertDialog>
+            <AlertDialogTrigger asChild><Button variant="outline" size="sm">Restore defaults</Button></AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle>Restore vCRO defaults?</AlertDialogTitle><AlertDialogDescription>This removes everything you have customised in vCRO on this browser. It cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { resetVcro(); setSet(DEFAULT_SETTINGS); toast.success("vCRO restored to defaults"); }}>Restore defaults</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </Row>
       </Widget>
     </div>

@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { usePrefs } from "@/features/shared/prefs";
-import { deptLures, orgSummary, recommendedActions, useSignals } from "@/lib/api";
+import { deptLures, orgSummary, recommendedActions, useSettings, useSignals } from "@/lib/api";
 
 type QA = { q: string; a: string; link: ReactNode };
 
@@ -13,6 +13,7 @@ export function AskAi() {
   const { askOpen, setAskOpen } = usePrefs();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const s = useSignals();
+  const settings = useSettings();
   const [asked, setAsked] = useState<QA[]>([]);
   const [text, setText] = useState("");
   const close = () => setAskOpen(false);
@@ -21,12 +22,12 @@ export function AskAi() {
     const o = orgSummary(s);
     const fin = o.departments.find((d) => d.department === "Finance")!;
     const sales = Object.entries(deptLures(s, "Sales")).sort((a, b) => b[1] - a[1])[0]!;
-    const best = [...recommendedActions(s)].sort((a, b) => b.impact - a.impact)[0]!;
+    const best = recommendedActions(s, settings.automation)[0]!;
     return [
       { q: "Why did Finance rise this month?", a: `Finance moved ${fin.change >= 0 ? "+" : ""}${fin.change} pts to ${fin.score}. Top driver: ${fin.topDriver.toLowerCase()}.`, link: <Link to="/vcro/people" search={{ dept: "Finance" }} onClick={close}>View Finance people</Link> },
       { q: "Which VIPs are very attacked?", a: `${o.vipAttacked} VIPs are tagged very attacked.`, link: <Link to="/vcro/watchlists" search={{ group: "very-attacked-vips" }} onClick={close}>Open watchlist</Link> },
       { q: "Which lure works best on Sales?", a: `${sales[0]}: ${sales[1]}% failure rate in Sales simulations.`, link: <Link to="/vcro/people" search={{ dept: "Sales" }} onClick={close}>View Sales people</Link> },
-      { q: "Which workflow reduced risk most?", a: `${best.workflow}: expected -${best.impact} pts across ${best.people} people.`, link: <Link to="/vcro/riskometer" onClick={close}>View actions</Link> },
+      { q: "Which workflow would reduce risk most?", a: `${best.workflow}: expected -${best.perPerson} pts per person across ${best.people} people.`, link: <Link to="/vcro/riskometer" onClick={close}>View actions</Link> },
     ];
   };
 
@@ -38,7 +39,7 @@ export function AskAi() {
     setText("");
   };
 
-  const suggestions = path.startsWith("/vcro") ? build().map((x) => x.q) : [];
+  const suggestions = askOpen && path.startsWith("/vcro") ? build().map((x) => x.q) : [];
 
   return (
     <Sheet open={askOpen} onOpenChange={setAskOpen}>

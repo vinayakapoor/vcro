@@ -14,10 +14,11 @@ export const BAND_VAR: Record<Band, string> = {
 };
 
 /** Band pill, optionally with the score number. */
-export function BandBadge({ band, score, className }: { band: Band; score?: number | null; className?: string }) {
+export function BandBadge({ band, score, className, provisional }: { band: Band; score?: number | null; className?: string; provisional?: boolean }) {
   return (
     <span
-      className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", className)}
+      title={provisional ? "Provisional: confidence is below your minimum" : undefined}
+      className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", provisional && "border-dashed", className)}
       style={{ borderColor: `color-mix(in oklab, ${BAND_VAR[band]} 45%, transparent)`, background: `color-mix(in oklab, ${BAND_VAR[band]} 12%, transparent)` }}
     >
       <span className="size-1.5 rounded-full" style={{ background: BAND_VAR[band] }} aria-hidden />

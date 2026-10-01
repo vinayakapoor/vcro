@@ -6,7 +6,7 @@ import { PageHeader } from "@/features/shared/widget";
 import { usePrefs, useReady } from "@/features/shared/prefs";
 import { BAND_VAR, BandBadge, DeltaBadge } from "@/features/shared/band";
 import { PeopleTable } from "@/features/people/people-table";
-import { addWatchlist, describeRule, initials, makeWatchlist, removeWatchlist, useCustomWatchlists, useSignals, watchlistSummary, type WatchlistRule } from "@/lib/api";
+import { addWatchlist, clearPinned, countRule, describeRule, fmt, initials, removeWatchlist, usePinned, useSavedWatchlists, useSignals, watchlistSummary, type WatchlistRule } from "@/lib/api";
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/vcro/watchlists")({
 function WatchlistsPage() {
   const ready = useReady();
   const { privacy } = usePrefs();
-  const lists = watchlistSummary(useSignals(), useCustomWatchlists());
+  const lists = watchlistSummary(useSignals(), useSavedWatchlists(), usePinned());
   const { group } = Route.useSearch();
   const sel = lists.find((l) => l.id === group) ?? lists[0]!;
 
@@ -51,7 +51,7 @@ function WatchlistsPage() {
             <div className="mt-0.5 min-h-8 text-xs text-muted-foreground">{l.rule}</div>
             <div className="mt-4 flex items-end justify-between gap-2">
               <div>
-                <div className="text-2xl font-semibold tabular-nums">{l.members.length}</div>
+                <div className="text-2xl font-semibold tabular-nums">{fmt(l.members.length)}</div>
                 <div className="text-xs text-muted-foreground">people</div>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -72,10 +72,10 @@ function WatchlistsPage() {
       <Card className="gap-3 rounded-xl p-4 shadow-none">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold">{sel.name}</h2>
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">{sel.rule} · {sel.members.length} people
-            {sel.custom && <Button variant="ghost" size="sm" onClick={() => { removeWatchlist(sel.id); toast.success("Watchlist deleted"); }}><Trash2 className="size-3.5" />Delete</Button>}</span>
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">{sel.rule} · {fmt(sel.members.length)} people
+            {sel.custom && <Button variant="ghost" size="sm" onClick={() => { sel.id === "pinned" ? clearPinned() : removeWatchlist(sel.id); toast.success(sel.id === "pinned" ? "Pinned people cleared" : "Watchlist deleted"); }}><Trash2 className="size-3.5" />{sel.id === "pinned" ? "Clear" : "Delete"}</Button>}</span>
         </div>
-        {ready ? <PeopleTable people={sel.members} /> : <Skeleton className="h-96 w-full" />}
+        {ready ? <PeopleTable key={sel.id} people={sel.members} exportName={`vcro-watchlist-${sel.id}`} /> : <Skeleton className="h-96 w-full" />}
       </Card>
     </div>
   );
@@ -87,7 +87,8 @@ function CreateWatchlist() {
   const [name, setName] = useState("");
   const [r, setR] = useState<WatchlistRule>({});
   const all = useSignals();
-  const preview = watchlistSummary(all, [makeWatchlist("p", r)]).at(-1)!.members.length;
+  const navigate = Route.useNavigate();
+  const preview = open ? countRule(all, r) : 0;
   const sel = (key: "department" | "location" | "tag" | "minBand", label: string, opts: readonly string[]) => (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -98,9 +99,9 @@ function CreateWatchlist() {
     </div>
   );
   const save = () => {
-    const w = makeWatchlist(name.trim(), r);
-    addWatchlist(w);
+    const w = addWatchlist(name.trim(), r);
     toast.success(`Watchlist "${w.name}" created`);
+    navigate({ search: { group: w.id } });
     setOpen(false); setName(""); setR({});
   };
   return (
@@ -109,7 +110,7 @@ function CreateWatchlist() {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create watchlist</DialogTitle>
-          <DialogDescription>People join and leave automatically as their signals change.</DialogDescription>
+          <DialogDescription>People join and leave automatically as their signals change. To add one person by hand, use Pin to watchlist on their page.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5"><Label htmlFor="wl-name">Name</Label><Input id="wl-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Watchlist name" /></div>
@@ -121,7 +122,7 @@ function CreateWatchlist() {
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3"><Label htmlFor="wl-rise">Score rising since last month</Label><Switch id="wl-rise" checked={!!r.rising} onCheckedChange={(v) => setR({ ...r, rising: v })} /></div>
           <div className="flex items-center justify-between rounded-lg border p-3"><Label htmlFor="wl-rep">2 or more failed simulations in 180 days</Label><Switch id="wl-rep" checked={!!r.repeatClicker} onCheckedChange={(v) => setR({ ...r, repeatClicker: v })} /></div>
-          <div className="rounded-lg bg-muted/50 p-3 text-sm"><span className="font-semibold tabular-nums">{preview} people</span><span className="text-muted-foreground"> match: {describeRule(r)}</span></div>
+          <div className="rounded-lg bg-muted/50 p-3 text-sm"><span className="font-semibold tabular-nums">{fmt(preview)} people</span><span className="text-muted-foreground"> match: {describeRule(r)}</span></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={!name.trim()} onClick={save}>Create watchlist</Button></DialogFooter>
       </DialogContent>

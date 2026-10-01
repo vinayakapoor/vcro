@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useEffect, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Building2, ChevronDown, ChevronRight, ChevronsUpDown, Globe, Sparkles, Sun, Moon, Monitor } from "lucide-react";
 import {
@@ -14,8 +14,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { usePrefs, type Theme } from "@/features/shared/prefs";
-import { getPerson, pseudonym, useSignals } from "@/lib/api";
-import { AFTER_VCRO, BEFORE_VCRO, PLATFORM_PAGES, VCRO_ICON, VCRO_ORDER, VCRO_PAGES, type PlatformItem } from "./nav";
+import { markVisited, pseudonym, useVisited } from "@/lib/api";
+import { PERSON_BY_ID } from "@/data/people";
+import { AFTER_VCRO, BEFORE_VCRO, PLATFORM_PAGES, VCRO_ICON, VCRO_ORDER, type PlatformItem } from "./nav";
 import { AskAi } from "./ask-ai";
 
 function Wordmark() {
@@ -47,14 +48,13 @@ function PlatformLink({ item, active }: { item: PlatformItem; active: boolean })
 }
 
 function useCrumbs(path: string): string[] {
-  const signals = useSignals();
   const { privacy } = usePrefs();
   const parts = path.split("/").filter(Boolean);
   if (parts[0] !== "vcro") return ["Dashboard", PLATFORM_PAGES[parts[0] ?? "home"] ?? "Home"];
-  const label = VCRO_ORDER.find((v) => v.page === parts[1] || v.to === `/vcro/${parts[1]}`)?.label ?? VCRO_PAGES[parts[1] ?? ""] ?? "Riskometer";
+  const label = VCRO_ORDER.find((v) => v.to === `/vcro/${parts[1]}`)?.label ?? "Riskometer";
   const out = ["Dashboard", "vCRO", label];
   if (parts[1] === "people" && parts[2]) {
-    const p = getPerson(signals, parts[2]);
+    const p = PERSON_BY_ID.get(parts[2]);
     if (p) out.push(privacy ? pseudonym(p.id) : p.name);
   }
   return out;
@@ -68,6 +68,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const crumbs = useCrumbs(path);
   const seg = path.split("/").filter(Boolean);
   const inVcro = seg[0] === "vcro";
+  const visited = useVisited();
+  useEffect(() => { if (inVcro && seg[1]) markVisited(seg[1]); }, [inVcro, seg[1], visited]);
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -106,20 +108,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {VCRO_ORDER.map((v) => {
-                            const active = v.page ? seg[1] === v.page : path.startsWith(v.to);
-                            return (
-                              <SidebarMenuSubItem key={v.label}>
-                                <SidebarMenuSubButton asChild isActive={active}>
-                                  {v.page ? (
-                                    <Link to="/vcro/$page" params={{ page: v.page }}>{v.label}</Link>
-                                  ) : (
-                                    <Link to={v.to as "/vcro/riskometer"}>{v.label}</Link>
-                                  )}
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            );
-                          })}
+                          {VCRO_ORDER.map((v) => (
+                            <SidebarMenuSubItem key={v.label}>
+                              <SidebarMenuSubButton asChild isActive={path.startsWith(v.to)}>
+                                <Link to={v.to}>{v.label}</Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>

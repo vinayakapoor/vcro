@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, Download,
-  MoreHorizontal, Rows3, Search, Settings2, SlidersHorizontal,
+  MoreHorizontal, Rows3, Search, Settings2, SlidersHorizontal, X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { download, fileDate, toCsv } from "@/lib/export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,11 +17,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 export type Column<T> = { id: string; header: string; cell: (r: T) => ReactNode; sort?: (r: T) => number | string; className?: string };
+/** CSV export of the filtered rows, or of the ticked rows when any are ticked. */
+export type TableExport<T> = { name: string; header: string[]; row: (r: T) => (string | number | null | undefined)[] };
 export type Filter<T> = { id: string; label: string; options: string[]; match: (r: T, v: string) => boolean };
 
 export function DataTable<T>({
   rows, columns, getId, filters = [], search, searchPlaceholder = "Search", onRowClick, rowMenu, toolbarExtra, initialFilters = {},
-  emptyText = "No results", emptyAction, defaultSort, pageSizeDefault = 25,
+  emptyText = "No results", emptyAction, defaultSort, pageSizeDefault = 25, exportAs, filterLabels,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -37,6 +39,9 @@ export function DataTable<T>({
   emptyAction?: ReactNode;
   defaultSort?: { id: string; dir: "asc" | "desc" };
   pageSizeDefault?: number;
+  exportAs?: TableExport<T>;
+  /** Display text for filter values that are ids. */
+  filterLabels?: Record<string, string>;
 }) {
   const [q, setQ] = useState("");
   const [vals, setVals] = useState<Record<string, string | undefined>>(initialFilters);
@@ -71,6 +76,7 @@ export function DataTable<T>({
   const cols = columns.filter((c) => !hidden.has(c.id));
   const allSel = view.length > 0 && view.every((r) => sel.has(getId(r)));
   const cellPad = dense ? "py-1.5" : "py-2.5";
+  const selCount = useMemo(() => filtered.filter((r) => sel.has(getId(r))).length, [filtered, sel, getId]);
 
   const toggleSort = (id: string) =>
     setSort((s) => (s?.id === id ? (s.dir === "desc" ? { id, dir: "asc" } : null) : { id, dir: "desc" }));
@@ -86,10 +92,15 @@ export function DataTable<T>({
         )}
         {filters.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => setAdvanced((a) => !a)} aria-pressed={advanced}>
-            <SlidersHorizontal className="size-4" />Advanced
+            <SlidersHorizontal className="size-4" />Filters
           </Button>
         )}
-        {advanced && filters.map((f) => (
+        {filters.filter((f) => !f.options.length && vals[f.id]).map((f) => (
+          <Button key={f.id} variant="outline" size="sm" className="bg-muted" onClick={() => { setVals((s) => ({ ...s, [f.id]: undefined })); setPage(0); }}>
+            {f.label}: {filterLabels?.[f.id] ?? vals[f.id]}<X className="size-3.5" />
+          </Button>
+        ))}
+        {advanced && filters.filter((f) => f.options.length).map((f) => (
           <DropdownMenu key={f.id}>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className={cn("border-dashed", vals[f.id] && "border-solid bg-muted")}>
@@ -106,7 +117,12 @@ export function DataTable<T>({
         ))}
         {toolbarExtra}
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={() => toast("Export started")}><Download className="size-4" />Export</Button>
+          {exportAs && (
+            <Button variant="outline" size="sm" disabled={!filtered.length} onClick={() => {
+              const picked = filtered.filter((r) => sel.has(getId(r)));
+              download(`${exportAs.name}-${fileDate()}.csv`, "text/csv", toCsv([exportAs.header, ...(picked.length ? picked : filtered).map(exportAs.row)]));
+            }}><Download className="size-4" />{selCount ? `Export ${selCount.toLocaleString("en-US")} selected` : "Export"}</Button>
+          )}
           <IconBtn label={dense ? "Comfortable rows" : "Compact rows"} onClick={() => setDense((d) => !d)}><Rows3 className="size-4" /></IconBtn>
           <DropdownMenu>
             <Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="size-8" aria-label="Columns"><Columns3 className="size-4" /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Columns</TooltipContent></Tooltip>
@@ -175,14 +191,14 @@ export function DataTable<T>({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span className="tabular-nums">{filtered.length ? `${p * size + 1}-${Math.min(filtered.length, (p + 1) * size)} of ${filtered.length}` : "0 of 0"}</span>
+        <span className="tabular-nums">{filtered.length ? `${(p * size + 1).toLocaleString("en-US")} to ${Math.min(filtered.length, (p + 1) * size).toLocaleString("en-US")} of ${filtered.length.toLocaleString("en-US")}` : "0 of 0"}</span>
         <div className="flex items-center gap-2">
           <span>Rows</span>
           <Select value={String(size)} onValueChange={(v) => { setSize(Number(v)); setPage(0); }}>
             <SelectTrigger className="h-8 w-[70px]" aria-label="Rows per page"><SelectValue /></SelectTrigger>
-            <SelectContent>{[10, 25, 50].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+            <SelectContent>{[10, 25, 50, 100].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
           </Select>
-          <span className="tabular-nums">{p + 1} / {pages}</span>
+          <span className="tabular-nums">Page {(p + 1).toLocaleString("en-US")} of {pages.toLocaleString("en-US")}</span>
           <IconBtn label="First page" onClick={() => setPage(0)} disabled={p === 0}><ChevronsLeft className="size-4" /></IconBtn>
           <IconBtn label="Previous page" onClick={() => setPage(p - 1)} disabled={p === 0}><ChevronLeft className="size-4" /></IconBtn>
           <IconBtn label="Next page" onClick={() => setPage(p + 1)} disabled={p >= pages - 1}><ChevronRight className="size-4" /></IconBtn>

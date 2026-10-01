@@ -6,7 +6,9 @@ import { Slider } from "@/components/ui/slider";
 import { PageHeader, StatCard, Widget } from "@/features/shared/widget";
 import { useReady } from "@/features/shared/prefs";
 import { InfoTip } from "@/features/shared/info";
-import { applyState, ELEMENTS, ELEMENT_WEIGHTS, orgScoreFor, previewWeights, signalStats, useSignals } from "@/lib/api";
+import { applyState, ELEMENTS, orgScoreFor, previewWeights, signalStats, useSignals } from "@/lib/api";
+import { BAND_RANGES } from "@/lib/scoring";
+import { useEffect, useMemo } from "react";
 import { CATEGORY_WEIGHTS, LIKELIHOOD_WEIGHTS, PILLAR_SHARE, type Pillar } from "@/lib/scoring";
 import { Gauge, Layers, Scale, Sigma } from "lucide-react";
 
@@ -30,30 +32,37 @@ const PRESETS = {
   "Training first": { Learning: 35, Culture: 20, Attitude: 15 },
 };
 const PILLARS = Object.keys(PILLAR_SHARE) as Pillar[];
-const BANDS = [
-  { name: "Low", range: "0 to 20", v: "var(--band-low)" },
-  { name: "Guarded", range: "21 to 40", v: "var(--band-guarded)" },
-  { name: "Elevated", range: "41 to 60", v: "var(--band-elevated)" },
-  { name: "High", range: "61 to 80", v: "var(--band-high)" },
-  { name: "Critical", range: "81 to 100", v: "var(--band-critical)" },
-];
-
 function WeightagePage() {
   const ready = useReady();
   const s = useSignals();
   const st = signalStats(s);
   const [draft, setDraft] = useState<Record<string, number>>(s.weights);
+  // Saved weights arrive after first paint; pick them up unless the admin has already started editing.
+  useEffect(() => setDraft(s.weights), [s.weights]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(s.weights);
+  const custom = Object.keys(s.weights).length > 0;
   const now = orgScoreFor(s).score;
   const next = dirty ? orgScoreFor(previewWeights(draft)).score : now;
   const wOf = (p: string, c: string) => draft[c] ?? (CATEGORY_WEIGHTS as Record<string, Record<string, number>>)[p]?.[c] ?? 0;
   const preset = (name: keyof typeof PRESETS) => setDraft(PRESETS[name]);
+  /** Share of the whole model each signal carries under the weights on screen. */
+  const effective = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const p of PILLARS) {
+      const els = ELEMENTS.filter((e) => e.pillar === p);
+      if (p === "Reporting") { for (const e of els) out[e.id] = PILLAR_SHARE[p] / els.length; continue; }
+      const cats = Object.keys(CATEGORY_WEIGHTS[p as keyof typeof CATEGORY_WEIGHTS]);
+      const total = cats.reduce((a, c) => a + wOf(p, c), 0) || 1;
+      for (const c of cats) { const ce = els.filter((e) => e.category === c); for (const e of ce) out[e.id] = (PILLAR_SHARE[p] * wOf(p, c)) / total / ce.length; }
+    }
+    return out;
+  }, [draft]);
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader title="Weightage" subtitle="How every signal counts towards the score" />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard ready={ready} label="Pillars" icon={Layers} value={PILLARS.length} caption="Behaviour leads at 45%" />
-        <StatCard ready={ready} label="Active elements" icon={Sigma} value={`${st.active} / ${st.total}`} caption="Signals in the score" />
+        <StatCard ready={ready} label="Active signals" icon={Sigma} value={`${st.active} / ${st.total}`} caption="Signals in the score" />
         <StatCard ready={ready} label="Score confidence" icon={Gauge} value={`${st.confidence}%`} caption="Connected weight share" />
         <StatCard ready={ready} label="Likelihood split" icon={Scale} value={`${LIKELIHOOD_WEIGHTS.Behaviour * 100} / ${LIKELIHOOD_WEIGHTS.Exposure * 100}`} caption="Behaviour / Exposure" />
       </div>
@@ -68,8 +77,8 @@ function WeightagePage() {
             <span className="text-muted-foreground"> {dirty ? `· ${next - now >= 0 ? "+" : ""}${next - now} pts with these weights. Every page updates when you apply.` : "· Drag a slider to see how the score would change."}</span>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={!Object.keys(draft).length && !dirty} onClick={() => setDraft({})}>Reset to default</Button>
-            <Button size="sm" disabled={!dirty} onClick={() => { applyState(previewWeights(draft)); toast.success(`Weights applied. Score ${now} → ${next}`); }}>Apply weights</Button>
+            <Button size="sm" variant="outline" disabled={!Object.keys(draft).length} onClick={() => setDraft({})}>Reset to default</Button>
+            <Button size="sm" disabled={!dirty} onClick={() => { applyState(previewWeights(draft)); toast.success(`Weights applied and saved. Score ${now} → ${next}`); }}>Apply weights</Button>
           </div>
         </div>
         <div className="flex h-3 overflow-hidden rounded-full">
@@ -108,23 +117,23 @@ function WeightagePage() {
       </Widget>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <Widget title="Top weighted signals" ready={ready} className="lg:col-span-7">
+        <Widget title="Top weighted signals" ready={ready} className="lg:col-span-7" action={<span className="text-xs text-muted-foreground">{dirty ? "With the weights on screen" : custom ? "Custom weights" : "Default weights"}</span>}>
           <div className="divide-y">
-            {[...ELEMENTS].sort((a, b) => (ELEMENT_WEIGHTS[b.id] ?? 0) - (ELEMENT_WEIGHTS[a.id] ?? 0)).slice(0, 10).map((e) => (
+            {[...ELEMENTS].sort((a, b) => effective[b.id]! - effective[a.id]!).slice(0, 10).map((e) => (
               <div key={e.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2 text-sm">
                 <div className="min-w-0"><div className="truncate">{e.name}</div><div className="text-xs text-muted-foreground">{e.pillar} · {e.category}{!s.active.has(e.id) && " · Off"}</div></div>
-                <span className="font-semibold tabular-nums">{((ELEMENT_WEIGHTS[e.id] ?? 0) * 100).toFixed(1)}%</span>
+                <span className="font-semibold tabular-nums">{(effective[e.id]! * 100).toFixed(1)}%</span>
               </div>
             ))}
           </div>
         </Widget>
         <Widget title="Risk bands" ready={ready} className="lg:col-span-5">
           <div className="space-y-2">
-            {BANDS.map((b) => (
-              <div key={b.name} className="flex items-center gap-3 rounded-lg border p-2.5 text-sm">
-                <span className="size-3 shrink-0 rounded-full" style={{ background: b.v }} />
-                <span className="flex-1 font-medium">{b.name}</span>
-                <span className="tabular-nums text-muted-foreground">{b.range}</span>
+            {BAND_RANGES.map((b) => (
+              <div key={b.band} className="flex items-center gap-3 rounded-lg border p-2.5 text-sm">
+                <span className="size-3 shrink-0 rounded-full" style={{ background: `var(--band-${b.band.toLowerCase()})` }} />
+                <span className="flex-1 font-medium">{b.band}</span>
+                <span className="tabular-nums text-muted-foreground">{b.from} to {b.to}</span>
               </div>
             ))}
           </div>

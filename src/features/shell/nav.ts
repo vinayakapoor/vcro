@@ -21,29 +21,17 @@ export const PLATFORM_PAGES: Record<string, string> = Object.fromEntries([...BEF
 
 export const VCRO_ICON = Gauge;
 
-/** vCRO sub-pages that have their own route file. */
-export const VCRO_BUILT = [
-  { to: "/vcro/riskometer", label: "Riskometer" },
-  { to: "/vcro/people", label: "People" },
-  { to: "/vcro/watchlists", label: "Watchlists" },
-  { to: "/vcro/signals", label: "Signals" },
-] as const;
+/** No vCRO page is served by the shared placeholder route any more; kept so that route still type-checks. */
+export const VCRO_PAGES: Record<string, string> = {};
 
-/** vCRO sub-pages served by the shared /vcro/$page route. */
-export const VCRO_PAGES: Record<string, string> = {
-  weightage: "Weightage",
-  reports: "Reports",
-  settings: "Settings",
-};
-
-export const VCRO_ORDER: { label: string; to: string; page?: string }[] = [
+export const VCRO_ORDER = [
   { label: "Getting started", to: "/vcro/getting-started" },
   { label: "Riskometer", to: "/vcro/riskometer" },
   { label: "People", to: "/vcro/people" },
   { label: "Departments", to: "/vcro/departments" },
   { label: "Watchlists", to: "/vcro/watchlists" },
   { label: "Signals", to: "/vcro/signals" },
-  { label: "Weightage", to: "/vcro/$page", page: "weightage" },
-  { label: "Reports", to: "/vcro/$page", page: "reports" },
-  { label: "Settings", to: "/vcro/$page", page: "settings" },
-];
+  { label: "Weightage", to: "/vcro/weightage" },
+  { label: "Reports", to: "/vcro/reports" },
+  { label: "Settings", to: "/vcro/settings" },
+] as const;
