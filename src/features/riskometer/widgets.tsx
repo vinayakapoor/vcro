@@ -497,31 +497,30 @@ export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType
 
       <div className="mt-6 flex flex-wrap items-baseline justify-between gap-2 border-t pt-5">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">Every part of the score
-          <InfoTip label="Every part of the score" text="Each box is one category of the model. The number is the organisation's average for that category, 0 to 100, where higher is riskier. Reporting is the exception: higher is better, and it takes points off. Points show how much the category adds to the organisation score today. Privilege categories scale the score instead of adding points." /></h3>
+          <InfoTip label="Every part of the score" text="Each box is one category of the model. The number is the organisation's average for that category, 0 to 100, where higher is riskier. Reporting is the exception: higher is better, and it takes points off. Points show how much the category adds to the organisation score today. Privilege categories scale the score instead of adding points. Hover a box to see its sources." /></h3>
         <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all you can connect</Link>
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {cats.map((c) => c.level === null ? (
-          <Link key={c.category} to="/vcro/signals/$id" params={{ id: c.connect!.id }}
-            className="group flex flex-col rounded-xl border border-dashed p-4 transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
-            <span className="mt-0.5 text-sm font-semibold">{c.category}</span>
-            <span className="mt-3 text-xs text-muted-foreground">{c.total} {c.total === 1 ? "signal" : "signals"} ready</span>
-            <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold">Connect {c.connect!.name}<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+          <Link key={c.category} to="/vcro/signals/$id" params={{ id: c.connect!.id }} title={`Connect ${c.connect!.name} to add ${c.total} ${c.total === 1 ? "signal" : "signals"}`}
+            className="group flex flex-col rounded-lg border border-dashed p-3 transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
+            <span className="mt-0.5 line-clamp-2 min-h-9 text-sm font-semibold leading-tight">{c.category}</span>
+            <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
           </Link>
         ) : (
-          <div key={c.category} className="flex flex-col rounded-xl border p-4">
-            <div className="flex items-start justify-between gap-2">
-              <span className="min-w-0"><span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span><span className="mt-0.5 block text-sm font-semibold leading-snug">{c.category}</span></span>
-              <span className="text-xl font-bold tabular-nums leading-none">{c.level}</span>
+          <div key={c.category} className="flex flex-col rounded-lg border p-3" title={`From ${c.sources.join(", ")}`}>
+            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
+            <div className="mt-0.5 flex min-h-9 items-start justify-between gap-2">
+              <span className="line-clamp-2 text-sm font-semibold leading-tight">{c.category}</span>
+              <span className="text-base font-bold leading-tight tabular-nums">{c.level}</span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${c.level}%`, background: c.reporting ? "var(--success)" : BAND_VAR[bandFor(c.level)] }} /></div>
-            <div className="mt-2 flex items-center justify-between gap-2 text-xs tabular-nums text-muted-foreground">
-              <span className="whitespace-nowrap">{c.live} of {c.total} signals</span>
-              {c.points !== null ? <span className={c.points < 0 ? "font-medium text-success" : "font-medium text-foreground"}>{c.points > 0 ? "+" : ""}{c.points.toFixed(1)} pts</span> : <span className="whitespace-nowrap">Multiplier</span>}
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${c.level}%`, background: c.reporting ? "var(--success)" : BAND_VAR[bandFor(c.level)] }} /></div>
+            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] tabular-nums text-muted-foreground">
+              <span className="whitespace-nowrap">{c.live}/{c.total} signals</span>
+              {c.points !== null ? <span className={`whitespace-nowrap font-medium ${c.points < 0 ? "text-success" : "text-foreground"}`}>{c.points > 0 ? "+" : ""}{c.points.toFixed(1)} pts</span>
+                : <span className="whitespace-nowrap">Multiplier</span>}
             </div>
-            <div className="mt-2 line-clamp-2 text-xs text-muted-foreground" title={c.sources.join(", ")}>{c.sources.join(", ")}</div>
-            {c.connect && <Link to="/vcro/signals/$id" params={{ id: c.connect.id }} className="mt-auto pt-2 text-xs font-medium underline underline-offset-2">Add {c.connect.name}{c.connect.more > 0 && ` +${c.connect.more}`}</Link>}
           </div>
         ))}
       </div>
