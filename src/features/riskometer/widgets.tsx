@@ -6,7 +6,7 @@ import {
   ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
 } from "recharts";
 import { toast } from "sonner";
-import { ArrowRight, Info, Play, RotateCcw, Users, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Info, Play, RotateCcw, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -20,7 +20,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  BENCHMARK, DEPARTMENTS, LURES, PREV_MONTH, categoryOverview, signalStats, useConnectors, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  BENCHMARK, DEPARTMENTS, LURES, PREV_MONTH, signalStats, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -106,9 +106,21 @@ export function BandsCard({ s, ready }: { s: Summary; ready: boolean }) {
 
 export function DriversCard({ s, ready }: { s: Summary; ready: boolean }) {
   const top = s.drivers.slice(0, 2);
+  const [open, setOpen] = useState(false);
   return (
-    <Widget title="What drives the score" ready={ready}>
-      <PillarMeters pillars={s.pillars} ai={s.aiAgents} />
+    <Widget title="What drives the score" ready={ready}
+      action={<button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{open ? "Hide points" : "Show points"}<ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} /></button>}>
+      {open ? (
+        <ul className="space-y-1.5">
+          {s.makeup.map((d) => (
+            <li key={d.category} className="flex items-center justify-between gap-3 text-sm">
+              <span className="truncate">{d.category === "Reporting offset" ? "Credit for reporting" : d.category}</span>
+              <span className={`shrink-0 font-medium tabular-nums ${d.points < 0 ? "text-success" : ""}`}>{d.points > 0 ? "+" : ""}{d.points.toFixed(1)} pts</span>
+            </li>
+          ))}
+          <li className="flex items-center justify-between gap-3 border-t pt-1.5 text-sm font-semibold"><span>Organisation score</span><span className="tabular-nums">{s.score}</span></li>
+        </ul>
+      ) : <PillarMeters pillars={s.pillars} ai={s.aiAgents} />}
       <div className="mt-3 border-t pt-2.5">
         <div className="flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><span>Moved since {PREV_MONTH}</span><span className="tabular-nums">{s.prev} to {s.score}</span></div>
         {top.length ? top.map((d) => (
@@ -470,14 +482,13 @@ const TILE_INFO: Record<string, string> = {
 export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage>; s: Summary }) {
   const sig = useSignals();
   const st = signalStats(sig);
-  const connectors = useConnectors();
-  const cats = ready ? categoryOverview(sig, connectors) : [];
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
       action={
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success"><span className="size-1.5 rounded-full bg-success" aria-hidden />{st.active} signals connected</span>
           <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Manage signals</Link></Button>
+          {st.active < st.total && <Button asChild size="sm"><Link to="/vcro/signals" search={{ tab: "integrations" }}>Connect more<ArrowRight className="size-3.5" /></Link></Button>}
         </div>
       }>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
@@ -489,42 +500,11 @@ export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground" style={{ width: `${p.coverage}%` }} /></div>
             <div className="mt-2 flex items-center justify-between gap-2 text-xs tabular-nums text-muted-foreground">
               <span>{p.active} of {p.total} signals</span>
-              {p.active < p.total && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="font-medium text-foreground underline underline-offset-2">Connect</Link>}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-baseline justify-between gap-2 border-t pt-5">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold">Every part of the score
-          <InfoTip label="Every part of the score" text="Each box is one category of the model. The number is the organisation's average for that category, 0 to 100, where higher is riskier. Reporting is the exception: higher is better, and it takes points off. Points show how much the category adds to the organisation score today. Privilege categories scale the score instead of adding points. Hover a box to see its sources." /></h3>
-        <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all you can connect</Link>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-        {cats.map((c) => c.level === null ? (
-          <Link key={c.category} to="/vcro/signals/$id" params={{ id: c.connect!.id }} title={`Connect ${c.connect!.name} to add ${c.total} ${c.total === 1 ? "signal" : "signals"}`}
-            className="group flex flex-col rounded-lg border border-dashed p-3 transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
-            <span className="mt-0.5 line-clamp-2 min-h-9 text-sm font-semibold leading-tight">{c.category}</span>
-            <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold">Connect more<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
-          </Link>
-        ) : (
-          <div key={c.category} className="flex flex-col rounded-lg border p-3" title={`From ${c.sources.join(", ")}`}>
-            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
-            <div className="mt-0.5 flex min-h-9 items-start justify-between gap-2">
-              <span className="line-clamp-2 text-sm font-semibold leading-tight">{c.category}</span>
-              <span className="text-base font-bold leading-tight tabular-nums">{c.level}</span>
-            </div>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${c.level}%`, background: c.reporting ? "var(--success)" : BAND_VAR[bandFor(c.level)] }} /></div>
-            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] tabular-nums text-muted-foreground">
-              <span className="whitespace-nowrap">{c.live}/{c.total} signals</span>
-              {c.points !== null ? <span className={`whitespace-nowrap font-medium ${c.points < 0 ? "text-success" : "text-foreground"}`}>{c.points > 0 ? "+" : ""}{c.points.toFixed(1)} pts</span>
-                : <span className="whitespace-nowrap">Multiplier</span>}
-            </div>
-            {c.connect && <Link to="/vcro/signals/$id" params={{ id: c.connect.id }} title={`Add ${c.connect.name}${c.connect.more > 0 ? ` and ${c.connect.more} more` : ""}`} className="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold">Connect more<ArrowRight className="size-3.5" /></Link>}
-          </div>
-        ))}
-      </div>
     </Widget>
   );
 }
@@ -572,14 +552,14 @@ export function HeatmapCard({ ready, rows, className }: { ready: boolean; rows: 
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.department}>
-                <th className="pr-2 text-left font-medium">
-                  <button type="button" className="hover:underline" onClick={() => navigate({ to: "/vcro/people", search: { dept: r.department } })}>{r.department}</button>
+            {rows.map((r, i) => (
+              <tr key={r.department} className={i === 0 ? "[&>*]:pb-2" : undefined}>
+                <th className={`pr-2 text-left ${i === 0 ? "font-semibold" : "font-medium"}`}>
+                  {i === 0 ? r.department : <button type="button" className="hover:underline" onClick={() => navigate({ to: "/vcro/people", search: { dept: r.department } })}>{r.department}</button>}
                 </th>
                 {r.cells.filter((c) => live.includes(c.category)).map((c) => (
                   <td key={c.category} title={`${r.department} · ${c.category}: ${c.value ?? "no data"}`}
-                    className="h-9 rounded-md text-center font-medium tabular-nums transition-transform hover:scale-105"
+                    className={`h-9 rounded-md text-center tabular-nums transition-transform hover:scale-105 ${i === 0 ? "font-bold ring-1 ring-foreground/15" : "font-medium"}`}
                     style={c.value === null ? undefined : { background: heat(c.value) }}>
                     {c.value === null ? <span className="text-muted-foreground">·</span> : c.value}
                   </td>
