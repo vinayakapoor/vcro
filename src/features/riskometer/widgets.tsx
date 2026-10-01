@@ -20,7 +20,7 @@ import { BAND_VAR, BandBadge, DeltaBadge, StatusBadge } from "@/features/shared/
 import { DataTable, type Column } from "@/features/shared/data-table";
 import { usePrefs } from "@/features/shared/prefs";
 import {
-  DEPARTMENTS, LURES, PREV_MONTH, signalStats, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
+  DEPARTMENTS, LURES, PREV_MONTH, contributingSources, signalStats, useConnectors, bestNextSources, axisFor, clearRun, deptLures, dismissRun, fmt, formatStamp, pct, pseudonym, queueRun, recommendedActions, trends, useRuns, useSettings, useSignals,
   type Action, type Department, type orgSummary,
 } from "@/lib/api";
 import { bandFor, type Band } from "@/lib/scoring";
@@ -76,7 +76,7 @@ export function PillarMeters({ pillars, ai }: { pillars: Record<"Behaviour" | "E
 export function RiskometerCard({ s, ready }: { s: Summary; ready: boolean }) {
   return (
     <Widget title="Riskometer" ready={ready} className="flex flex-col lg:col-span-4" contentClassName="flex flex-1 flex-col" empty={s.scored === 0 && { text: "No scored people yet", action: <Button asChild variant="outline" size="sm"><Link to="/vcro/signals">Connect source</Link></Button> }}>
-      <div className="flex flex-1 items-center justify-center px-2 py-8"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
+      <div className="flex flex-1 items-center justify-center px-2 py-2 sm:py-8"><Gauge value={s.score} prev={s.prev} prevLabel={PREV_MONTH} confidence={s.confidence} /></div>
       <div className="flex justify-center border-t pt-4"><ConfidenceLine confidence={s.confidence} active={s.activeCount} total={s.totalElements} /></div>
     </Widget>
   );
@@ -467,6 +467,9 @@ const TILE_INFO: Record<string, string> = {
 export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<typeof import("@/lib/api").signalCoverage> }) {
   const sig = useSignals();
   const st = signalStats(sig);
+  const connectors = useConnectors();
+  const [all, setAll] = useState(false);
+  const live = ready ? contributingSources(sig, connectors) : [];
   const next = ready ? bestNextSources(sig) : [];
   return (
     <Widget title="Signals feeding the score" ready={ready} className="lg:col-span-12"
@@ -487,22 +490,43 @@ export function SignalsCard({ ready, cov }: { ready: boolean; cov: ReturnType<ty
         ))}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 border-t pt-4 text-sm">
-        <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{st.inbound.on} of {st.inbound.total} integrations connected</span> · plus {st.modules.total} HumanFirewall modules · {fmt(cov.events30d)} events in 30 days</span>
-        {next.length > 0 && <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all {next.length} you can connect</Link>}
+      <div className="mt-5 grid gap-6 border-t pt-5 lg:grid-cols-2">
+        <div className="min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">Contributing now</h3>
+            <span className="text-xs tabular-nums text-muted-foreground">{st.modules.on} modules · {st.inbound.on} integrations · {fmt(cov.events30d)} events in 30 days</span>
+          </div>
+          <ul className="mt-3 space-y-2.5">
+            {(all ? live : live.slice(0, 5)).map((c) => (
+              <li key={c.id} className="grid grid-cols-[minmax(0,1fr)_88px_44px] items-center gap-3 text-sm" title={c.names.join(", ")}>
+                <span className="min-w-0"><span className="block truncate font-medium">{c.name}</span><span className="block truncate text-xs text-muted-foreground">{c.product} · {c.signals} {c.signals === 1 ? "signal" : "signals"}</span></span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground" style={{ width: `${(c.share / (live[0]?.share || 1)) * 100}%` }} /></span>
+                <span className="text-right text-xs font-semibold tabular-nums">{c.share.toFixed(1)}%</span>
+              </li>
+            ))}
+          </ul>
+          {live.length > 5 && <button type="button" onClick={() => setAll((v) => !v)} aria-expanded={all} className="mt-3 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2">{all ? "Show the top 5" : `Show all ${live.length} contributing sources`}</button>}
+          <p className="mt-3 text-xs text-muted-foreground">The percentage is each source's share of the scoring model. Together they make up the {st.confidence}% confidence.</p>
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">Connect next</h3>
+            <Link to="/vcro/signals" search={{ tab: "integrations" }} className="text-xs font-medium underline underline-offset-2">See all you can connect</Link>
+          </div>
+          {next.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {next.slice(0, 3).map((n) => (
+                <li key={n.id} className="rounded-xl border">
+                  <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">Adds {n.signals} {n.signals === 1 ? "signal" : "signals"} and {n.gain}% confidence</span></span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="mt-3 rounded-xl border bg-success/5 p-4 text-sm text-success">Every integration is connected. The score has full data behind it.</p>}
+        </div>
       </div>
-      {next.length > 0 ? (
-        <ul className="mt-3 grid gap-3 md:grid-cols-3">
-          {next.slice(0, 3).map((n) => (
-            <li key={n.id} className="rounded-xl border">
-              <Link to="/vcro/signals/$id" params={{ id: n.id }} className="group flex items-center gap-3 rounded-xl p-4 text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <span className="min-w-0 flex-1"><span className="block truncate font-medium">{n.name}</span><span className="block text-xs text-muted-foreground">+{n.gain}% confidence · {n.signals} {n.signals === 1 ? "signal" : "signals"}</span></span>
-                <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="mt-3 rounded-xl border bg-success/5 p-4 text-sm text-success">Every source is connected. The score has full data behind it.</p>}
     </Widget>
   );
 }

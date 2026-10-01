@@ -636,6 +636,13 @@ export function signalCoverage(s: SignalState) {
   const sources = SOURCES.filter((x) => x.direction !== "Action out").map((x) => ({ ...x, on: s.connected.has(x.id) }));
   return { pillars, sources, events30d: sources.filter((x) => x.on).reduce((a, x) => a + x.events30d, 0), missing: sources.filter((x) => !x.on && x.kind === "Integration") };
 }
+/** Connected sources ranked by how much of the score each one supplies. */
+export function contributingSources(s: SignalState, connectors: Record<string, ConnectorConfig>) {
+  return SOURCES.filter((x) => x.direction !== "Action out" && s.connected.has(x.id)).map((x) => {
+    const live = ELEMENTS.filter((e) => e.sourceId === x.id && s.active.has(e.id));
+    return { id: x.id, name: x.name, kind: x.kind, product: x.kind === "Module" ? "HumanFirewall module" : connectors[x.id]?.vendor ?? "", signals: live.length, share: Math.round(live.reduce((a, e) => a + ELEMENT_WEIGHTS[e.id]!, 0) * 1000) / 10, names: live.map((e) => e.name) };
+  }).filter((x) => x.signals > 0).sort((a, b) => b.share - a.share);
+}
 /** Unconnected sources ranked by how much confidence each would add. */
 export function bestNextSources(s: SignalState) {
   const base = confidenceFor(ELEMENTS, (e) => s.active.has(e.id));

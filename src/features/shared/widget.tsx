@@ -56,7 +56,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-2xl sm:text-[28px] font-semibold leading-tight tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+        {subtitle && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       {action}
     </div>

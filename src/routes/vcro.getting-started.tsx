@@ -41,7 +41,7 @@ function GettingStarted() {
   // Every tick reads live state. Nothing is pre-ticked.
   const steps = [
     { phase: 0, icon: Plug, title: "Connect your data", body: "Turn on HumanFirewall modules and connect your security stack. The more sources, the narrower the likely range around the score.",
-      done: s.confidence >= sig.config.minConfidence, meta: `${st.inbound.on} of ${st.inbound.total} integrations · confidence ${s.confidence}%`, need: `Reach your ${sig.config.minConfidence}% minimum confidence`, to: "/vcro/signals" as const, cta: "Open Signals" },
+      done: s.confidence >= sig.config.minConfidence, meta: `${st.inbound.on} integrations and ${st.modules.total} modules · confidence ${s.confidence}%`, need: `Reach your ${sig.config.minConfidence}% minimum confidence`, to: "/vcro/signals" as const, cta: "Open Signals" },
     { phase: 0, icon: Network, title: "Check your organisation", body: "Confirm the departments, teams and reporting lines look right. Scores roll up along this structure.",
       done: hr && visited.includes("departments"), meta: `${fmt(s.total)} people · ${DEPARTMENTS.length} departments · ${fmt(managers)} teams`, need: hr ? "Open Departments to review" : "Connect the HR system first", to: "/vcro/departments" as const, cta: "Open Departments" },
     { phase: 0, icon: Scale, title: "Tune the model", body: "See how Behaviour, Exposure, Privilege and Reporting add up, and shift the weights if your priorities differ.",
@@ -53,7 +53,7 @@ function GettingStarted() {
     { phase: 1, icon: Eye, title: "Decide who to watch", body: "Tags and watchlists group people by who they are and how they behave. Add the groups that matter to you.",
       done: own > 0, meta: own ? `${own} of your own · ${liveTags} built-in tags live` : `${liveTags} built-in tags live`, need: "Create a watchlist or tag, or pin a person", to: "/vcro/watchlists" as const, cta: "Open Watchlists" },
     { phase: 2, icon: Repeat, title: "Act on the score", body: "Run a recommended action, or send the score to the tools that enforce and respond.",
-      done: queued > 0 || st.outbound.on > 0, meta: `${queued} actions queued · ${st.outbound.on} of ${st.outbound.total} tools acting on the score`, need: "Run an action or connect an Actions out integration", to: "/vcro/riskometer" as const, cta: "See actions" },
+      done: queued > 0 || st.outbound.on > 0, meta: `${queued} actions queued · ${st.outbound.on} tools acting on the score`, need: "Run an action or connect an Actions out integration", to: "/vcro/riskometer" as const, cta: "See actions" },
     { phase: 2, icon: FileBarChart, title: "Report to the board", body: "Generate the board pack, a monthly summary or audit evidence, as it stands today.",
       done: reports > 0, meta: reports ? `${reports} generated` : "None generated yet", need: "Generate a report", to: "/vcro/reports" as const, cta: "Open Reports" },
   ];
@@ -62,7 +62,7 @@ function GettingStarted() {
 
   const glance: [string, string][] = [
     ["People", fmt(s.total)], ["Scored", fmt(s.scored)], ["Departments", String(DEPARTMENTS.length)], ["Teams", fmt(managers)],
-    ["Integrations", `${st.integrations.on} of ${st.integrations.total}`], ["Signals live", `${st.active} of ${st.total}`], ["Confidence", `${s.confidence}%`], ["Tags live", `${liveTags + customTags.length}`],
+    ["Integrations connected", `${st.integrations.on}`], ["Signals live", `${st.active} of ${st.total}`], ["Confidence", `${s.confidence}%`], ["Tags live", `${liveTags + customTags.length}`],
   ];
 
   return (

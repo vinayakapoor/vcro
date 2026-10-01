@@ -48,6 +48,7 @@ function WatchlistsPage() {
   const tags = useCustomTags();
   const lists = watchlistSummary(sig, useSavedWatchlists(), usePinned(), tags);
   const { group } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [find, setFind] = useState("");
   const sel = lists.find((l) => l.id === group && !l.needs) ?? lists[0]!;
   const watched = new Map(lists.filter((l) => l.kind !== "who" || l.id === "very-attacked-vips").flatMap((l) => l.members.map((m) => [m.id, m] as const)));
@@ -73,7 +74,14 @@ function WatchlistsPage() {
       </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="rounded-2xl border bg-card p-3 lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto" aria-label="Groups">
+        <div className="lg:hidden">
+          <Label htmlFor="wl-pick" className="mb-1.5 block text-xs text-muted-foreground">Group</Label>
+          <Select value={sel.id} onValueChange={(v) => navigate({ search: { group: v }, resetScroll: false })}>
+            <SelectTrigger id="wl-pick" className="h-10 w-full bg-card"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-80">{lists.filter((l) => !l.needs).map((l) => <SelectItem key={l.id} value={l.id}>{l.name} · {fmt(l.members.length)}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <aside className="hidden rounded-2xl border bg-card p-3 lg:sticky lg:block lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto" aria-label="Groups">
           <div className="relative mb-2"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a group" aria-label="Find a group" className="h-8 pl-8" /></div>
           {SECTIONS.map((sec) => {
             const items = lists.filter((l) => l.kind === sec.kind && l.name.toLowerCase().includes(find.trim().toLowerCase()));

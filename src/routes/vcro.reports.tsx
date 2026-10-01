@@ -240,7 +240,7 @@ function ReportsPage() {
             <Widget title="Score by department" ready={ready}>
               <Chart h="h-80"><BarChart data={depts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }} barCategoryGap="28%">
                 <CartesianGrid horizontal={false} stroke="var(--border)" />
-                <XAxis type="number" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AX} tickLine={false} axisLine={false} />
+                <XAxis type="number" domain={[0, Math.min(100, Math.ceil((Math.max(...depts.map((d) => d.score)) + 8) / 10) * 10)]} allowDecimals={false} tick={AX} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="department" tick={AX} tickLine={false} axisLine={false} width={112} />
                 <Tooltip {...TIP} />
                 <Bar dataKey="score" name="Score" radius={[0, 4, 4, 0]} isAnimationActive={false} label={{ position: "right", fontSize: 11, fill: "var(--foreground)" }}>
@@ -354,7 +354,7 @@ function ReportsPage() {
         <TabsContent value="signals" className="mt-5 space-y-5">
           <Kpis ready={ready} items={[
             ["Confidence", `${s.confidence}%`, "Share of the model with live data"],
-            ["Integrations connected", `${st.inbound.on} of ${st.inbound.total}`, `Feeding the score, plus ${st.modules.total} modules`],
+            ["Integrations connected", `${st.inbound.on}`, `Feeding the score, plus ${st.modules.total} modules`],
             ["Signals in the score", `${s.activeCount} of ${s.totalElements}`, "Connected and switched on"],
             ["Events in 30 days", fmt(cov.events30d), "From connected sources"],
           ]} />
