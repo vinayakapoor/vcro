@@ -506,7 +506,7 @@ export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType
             className="group flex flex-col rounded-lg border border-dashed p-3 transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{c.pillar}</span>
             <span className="mt-0.5 line-clamp-2 min-h-9 text-sm font-semibold leading-tight">{c.category}</span>
-            <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold">Connect<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+            <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold">Connect more<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
           </Link>
         ) : (
           <div key={c.category} className="flex flex-col rounded-lg border p-3" title={`From ${c.sources.join(", ")}`}>
@@ -521,6 +521,7 @@ export function SignalsCard({ ready, cov, s }: { ready: boolean; cov: ReturnType
               {c.points !== null ? <span className={`whitespace-nowrap font-medium ${c.points < 0 ? "text-success" : "text-foreground"}`}>{c.points > 0 ? "+" : ""}{c.points.toFixed(1)} pts</span>
                 : <span className="whitespace-nowrap">Multiplier</span>}
             </div>
+            {c.connect && <Link to="/vcro/signals/$id" params={{ id: c.connect.id }} title={`Add ${c.connect.name}${c.connect.more > 0 ? ` and ${c.connect.more} more` : ""}`} className="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold">Connect more<ArrowRight className="size-3.5" /></Link>}
           </div>
         ))}
       </div>
