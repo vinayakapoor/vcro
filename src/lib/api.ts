@@ -72,14 +72,14 @@ const DEFAULT_STORE: Store = {
     ["int-endpoint", "CrowdStrike Falcon", "https://api.eu-1.crowdstrike.com", "2026-06-18T11:25:00Z", "2026-10-01T10:42:00Z"],
     ["int-web", "Zscaler", "Log stream", "2026-07-02T08:05:00Z", "2026-10-01T10:44:00Z"],
     ["int-hr", "Workday", "https://wd3.myworkday.com/demoenterprise/scim/v2", "2026-06-12T09:40:00Z", "2026-10-01T06:00:00Z"],
-    ["int-osint", "Have I Been Pwned", "https://haveibeenpwned.com/api/v3", "2026-06-20T14:00:00Z", "2026-09-30T23:00:00Z"],
+    ["int-osint", "HumanFirewall web and social scan, Have I Been Pwned, SpyCloud", "3 feeds", "2026-06-20T14:00:00Z", "2026-09-30T23:00:00Z"],
   ] as const).map(([id, vendor, account, connectedAt, lastSync]) => [id, { vendor, account, connectedAt, lastSync, frequency: id === "int-hr" || id === "int-osint" ? "Daily" : "Hourly", scope: "All people", controls: {} }])),
 };
 
 let store: Store = DEFAULT_STORE;
 const listeners = new Set<() => void>();
 // Bump the version when the source catalogue changes, so old saved connections do not hide new defaults.
-const KEY = "hf.vcro.v4";
+const KEY = "hf.vcro.v5";
 
 function persist() {
   if (typeof localStorage === "undefined") return;
@@ -705,9 +705,9 @@ export function driverSources(s: SignalState, connectors: Record<string, Connect
   for (const e of ELEMENTS) {
     if (!s.active.has(e.id)) continue;
     const src = SOURCES.find((x) => x.id === e.sourceId)!;
-    const name = src.kind === "Module" ? src.name : connectors[src.id]?.vendor ?? src.name;
+    const names = src.kind === "Module" ? [src.name] : (connectors[src.id]?.vendor ?? src.name).split(", ");
     const key = e.pillar === "Reporting" ? "Reporting offset" : e.category;
-    if (!(out[key] ??= []).includes(name)) out[key]!.push(name);
+    for (const name of names) if (!(out[key] ??= []).includes(name)) out[key]!.push(name);
   }
   return out;
 }

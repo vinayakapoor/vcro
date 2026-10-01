@@ -18,6 +18,8 @@ export type Source = {
   auth?: "OAuth" | "API key" | "SCIM and API key" | "Webhook" | "Log stream" | "Issued key";
   /** Products this connector supports. The admin picks theirs during setup. */
   vendors?: string[];
+  /** True when the connector usually runs on several feeds at once. */
+  multi?: boolean;
   controls?: Control[];
   defaultConnected: boolean;
   lastSync: string;
@@ -36,7 +38,7 @@ export const SOURCES: Source[] = [
   { id: "announcements", name: "Announcements", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 08:00", events30d: 5110 },
   { id: "esa", name: "Email Security (ESA)", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 10:44", events30d: 18900 },
   { id: "remediator", name: "Email Remediator", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 10:43", events30d: 2730 },
-  { id: "feedback", name: "Feedback", kind: "Module", defaultConnected: true, lastSync: "30 Sep, 18:00", events30d: 890 },
+  { id: "feedback", name: "Surveys", kind: "Module", defaultConnected: true, lastSync: "30 Sep, 18:00", events30d: 890 },
   { id: "gamification", name: "Gamification", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 10:00", events30d: 3320 },
   { id: "recipients", name: "Recipients", kind: "Module", defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 5200 },
   { id: "int-identity", name: "Identity provider", kind: "Integration", category: "Identity", direction: "Signal in", about: "Sign-in risk, admin roles and MFA strength across every account in the organisation.", auth: "OAuth", vendors: ["Microsoft Entra ID", "Okta", "Google Workspace", "Ping Identity", "OneLogin"], defaultConnected: true, lastSync: "1 Oct, 10:40", events30d: 9400 },
@@ -50,7 +52,7 @@ export const SOURCES: Source[] = [
   { id: "int-email", name: "Email gateway", kind: "Integration", category: "Email", direction: "Signal in", about: "Impersonation attempts aimed at the organisation and misdirected outbound email.", auth: "API key", vendors: ["Proofpoint", "Mimecast", "Microsoft Defender for Office 365", "Abnormal"], defaultConnected: false, lastSync: "", events30d: 16400 },
   { id: "int-collab", name: "Collaboration and chat", kind: "Integration", category: "Collaboration", direction: "Signal in", about: "Phishing clicked and reported in chat, and risky external sharing across workspaces.", auth: "OAuth", vendors: ["Microsoft Teams", "Slack", "Google Chat"], defaultConnected: false, lastSync: "", events30d: 3900 },
   { id: "int-hr", name: "HR system", kind: "Integration", category: "HR", direction: "Signal in", about: "Org chart, departments, joiners, movers, leavers and contractors.", auth: "SCIM and API key", vendors: ["Workday", "SAP SuccessFactors", "Oracle HCM", "Bayzat", "BambooHR"], defaultConnected: true, lastSync: "1 Oct, 06:00", events30d: 140 },
-  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "Breached credentials and what is public about the organisation and its people.", auth: "API key", vendors: ["Have I Been Pwned", "SpyCloud", "Recorded Future"], defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
+  { id: "int-osint", name: "OSINT monitoring", kind: "Integration", category: "OSINT", direction: "Signal in", about: "What an attacker can find: breached credentials from breach-data feeds, and public contact details and social footprint from a web and social scan.", auth: "API key", multi: true, vendors: ["HumanFirewall web and social scan", "Have I Been Pwned", "SpyCloud", "Recorded Future", "Flashpoint"], defaultConnected: true, lastSync: "30 Sep, 23:00", events30d: 410 },
   { id: "int-ai", name: "AI agents and copilots", kind: "Integration", category: "AI identities", direction: "Signal in", about: "The AI agents in use across the organisation, what they can reach and who has reviewed them.", auth: "OAuth", vendors: ["Microsoft Entra Agent ID", "Microsoft Copilot Studio", "Custom agent registry"], defaultConnected: false, lastSync: "", events30d: 880 },
   { id: "out-access", name: "Conditional access", kind: "Integration", category: "Identity", direction: "Action out", about: "Keep directory groups in step with the score, so your own access policies act on them.", auth: "OAuth", vendors: ["Microsoft Entra ID", "Okta"], defaultConnected: false, lastSync: "", events30d: 0,
     controls: [{ id: "stepup", name: "High risk group", detail: "Keep a directory group of High and Critical people. Your step-up sign-in policy targets the group.", people: "high" }, { id: "session", name: "Very attacked VIP group", detail: "Keep a directory group of very attacked VIPs for shorter sessions or stricter device rules.", people: "vipAttacked" }] },

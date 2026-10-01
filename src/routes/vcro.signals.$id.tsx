@@ -98,9 +98,13 @@ function Setup({ src }: { src: Source }) {
   const ready = useReady();
   const sig = useSignals();
   const els = ELEMENTS.filter((e) => e.sourceId === src.id);
-  const fields = FIELDS[src.auth ?? "API key"];
   const vendors = src.vendors ?? [];
   const [vendor, setVendor] = useState(vendors.length === 1 ? vendors[0]! : "");
+  const picked = vendor ? vendor.split(", ") : [];
+  // A multi-feed connector needs one key per outside feed. HumanFirewall's own scan needs none.
+  const fields = src.multi
+    ? picked.filter((v) => !v.startsWith("HumanFirewall")).map((v) => ({ key: v, label: `${v} API key`, placeholder: "Paste the key", secret: true }))
+    : FIELDS[src.auth ?? "API key"];
   const [vals, setVals] = useState<Record<string, string>>({});
   const [issued, setIssued] = useState<{ key: string; url: string } | null>(null);
   const [added, setAdded] = useState(false);
@@ -123,7 +127,7 @@ function Setup({ src }: { src: Source }) {
   const scopeDone = src.direction === "Action out" ? Object.values(controls).some(Boolean) : skip.length < els.length;
   const before = ready ? orgScoreFor(sig) : null;
   const after = ready && step === 4 ? orgScoreFor(previewSource(src.id, true)) : null;
-  const checks = CHECKS(src, vendor || "the service", matched, total);
+  const checks = CHECKS(src, picked.length > 1 ? "each feed" : vendor || "the service", matched, total);
 
   const authorise = () => { setAuthorising(true); timer.current = setTimeout(() => { setAuthorising(false); setAuthorised(true); }, 1100); };
   const runTest = () => {
@@ -132,21 +136,21 @@ function Setup({ src }: { src: Source }) {
     tick(0);
   };
   const connect = () => {
-    connectSource(src.id, { vendor, account: keyed ? `Key ending ${issued!.key.slice(-4)}` : stream ? "Log stream" : vals["account"]!.trim(), frequency: stream ? "Continuous" : freq, scope, controls }, skip);
-    toast.success(`${vendor} connected`, { description: src.direction === "Action out" ? "The score is now being sent." : `First sync complete. ${fmt(matched)} people matched.` });
+    connectSource(src.id, { vendor, account: src.multi ? `${picked.length} ${picked.length === 1 ? "feed" : "feeds"}` : keyed ? `Key ending ${issued!.key.slice(-4)}` : stream ? "Log stream" : vals["account"]!.trim(), frequency: stream ? "Continuous" : freq, scope, controls }, skip);
+    toast.success(`${picked.length > 1 ? src.name : vendor} connected`, { description: src.direction === "Action out" ? "The score is now being sent." : `First sync complete. ${fmt(matched)} people matched.` });
   };
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <ol className="rounded-xl border bg-card p-5 [&>li:last-child>div]:pb-0">
-        <Step n={1} title="Choose your product" done={!!vendor}>
+        <Step n={1} title={src.multi ? "Choose your feeds" : "Choose your product"} done={!!vendor}>
           <div className="flex flex-wrap gap-2">
             {vendors.map((v) => (
-              <button key={v} type="button" aria-pressed={vendor === v} disabled={authorised}
-                onClick={() => { setVendor(v); setStep(-1); }}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${vendor === v ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-muted"}`}>{v}</button>
+              <button key={v} type="button" aria-pressed={picked.includes(v)} disabled={authorised}
+                onClick={() => { setVendor(src.multi ? (picked.includes(v) ? picked.filter((x) => x !== v) : [...picked, v]).join(", ") : v); setStep(-1); }}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${picked.includes(v) ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-muted"}`}>{v}</button>
             ))}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Using something else? Your HumanFirewall contact can add a connector, or you can send events to the generic ingest API.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{src.multi && "Pick every feed you use. Breach feeds supply breached credentials; the web and social scan supplies public contact details and social footprint. "}Using something else? Your HumanFirewall contact can add a connector, or you can send events to the generic ingest API.</p>
         </Step>
 
         <Step n={2} title={src.auth === "OAuth" ? `Authorise access${vendor ? ` in ${vendor}` : ""}` : stream ? `Point ${vendor || "your gateway"} at vCRO` : keyed ? "Create an API key" : "Enter connection details"} done={authDone}>
@@ -234,7 +238,7 @@ function Setup({ src }: { src: Source }) {
           )}
           {step === 4 && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button onClick={connect}>Connect {vendor}</Button>
+              <Button onClick={connect}>Connect {picked.length > 1 ? `${picked.length} feeds` : vendor}</Button>
               <span className="text-xs text-muted-foreground">All checks passed.</span>
             </div>
           )}
